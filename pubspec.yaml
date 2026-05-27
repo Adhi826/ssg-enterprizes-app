@@ -1,0 +1,78 @@
+name: sri_siva_gayathri_enterprizes
+description: Stock Management & Billing App for Sri Siva Gayathri Enterprizes
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  cloud_firestore: ^4.14.0
+  firebase_storage: ^11.6.0
+  firebase_messaging: ^14.7.10
+  google_sign_in: ^6.2.1
+
+  # State Management (Migrated to Riverpod MVVM)
+  flutter_riverpod: ^2.4.9
+  riverpod: ^2.4.9
+
+  # UI & Animations
+  animate_do: ^3.1.2
+  fl_chart: ^0.66.0
+  lottie: ^2.7.0
+  shimmer: ^3.0.0
+  flutter_staggered_animations: ^1.1.1
+  cached_network_image: ^3.3.1
+  image_picker: ^1.0.7
+
+  # Navigation
+  go_router: ^13.0.1
+
+  # Storage & Preferences
+  shared_preferences: ^2.2.2
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # PDF & Printing
+  pdf: ^3.10.8
+  printing: ^5.12.0
+  path_provider: ^2.1.2
+
+  # Barcode & QR
+  mobile_scanner: ^3.5.6
+  qr_flutter: ^4.1.0
+
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.3.3
+  share_plus: ^7.2.2
+  url_launcher: ^6.2.5
+  flutter_local_notifications: ^16.3.0
+  permission_handler: ^11.3.0
+  connectivity_plus: ^5.0.2
+  open_file: ^3.3.2
+  syncfusion_flutter_xlsio: ^24.1.41
+
+  # Icons & Fonts
+  flutter_svg: ^2.0.10+1
+  google_fonts: ^6.2.1
+  flutter_vector_icons: ^2.0.0
+  iconsax: ^0.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.8
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
