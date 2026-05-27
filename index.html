@@ -1579,6 +1579,25 @@
     let customerDues = [];
     let paymentHistory = [];
 
+    // Startup synchronization state
+    let appLoaded = false;
+    let authChecked = false;
+    let authData = null;
+    let authStatus = null;
+
+    function handleStartupResolution() {
+      if (appLoaded && authChecked) {
+        const splash = document.getElementById('splash-screen');
+        if (splash) splash.classList.add('hidden');
+
+        if (authStatus === 'success' && authData) {
+          loginSuccess(authData.name, authData.email, authData.photoUrl);
+        } else {
+          performLogout(true);
+        }
+      }
+    }
+
     // Normalize Invoice data to ensure complete compatibility between Web and Flutter/Firestore formats
     function normalizeInvoice(inv) {
       if (!inv) return null;
@@ -1694,7 +1713,7 @@
       let config = null;
 
       // Check if build-time environment variables are populated
-      if (envConfig.apiKey && envConfig.apiKey !== "___FIREBASE_API_KEY___") {
+      if (envConfig.apiKey && !envConfig.apiKey.startsWith("___")) {
         config = envConfig;
         console.log("Firebase initialized via production environment variables.");
       } else {
@@ -1716,6 +1735,15 @@
           auth = firebase.auth();
           storage = firebase.storage();
           fbConnected = true;
+
+          // Set explicit local persistence
+          auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+            .then(() => {
+              console.log("Firebase Auth persistence set to LOCAL.");
+            })
+            .catch(err => {
+              console.error("Firebase Auth persistence error: ", err);
+            });
 
           // Update settings fields
           document.getElementById('fb-api-key').value = config.apiKey || '';
@@ -1817,6 +1845,37 @@
     function setupFirebaseListeners() {
       if (!fbConnected) return;
 
+      // Check redirect result first
+      auth.getRedirectResult()
+        .then((result) => {
+          if (result && result.user) {
+            const user = result.user;
+            console.log("Firebase Auth: Redirect sign-in success for", user.email);
+            const name = user.displayName || 'Sri Siva Gayathri User';
+            const email = user.email || '';
+            const photoUrl = user.photoURL || '';
+
+            // Save user data to Firestore
+            db.collection('users').doc(user.uid).set({
+              uid: user.uid,
+              name: name,
+              email: email,
+              profileImage: photoUrl,
+              lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true })
+            .then(() => {
+              console.log("User profile saved/updated in Firestore via redirect");
+            })
+            .catch((err) => {
+              console.error("Firestore save error: ", err);
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("Redirect Sign-In Error:", error);
+          handleAuthError(error);
+        });
+
       // Real-time listener for Products collection
       db.collection('products').onSnapshot(snapshot => {
         let fbProducts = [];
@@ -1904,14 +1963,18 @@
       auth.onAuthStateChanged(user => {
         if (user) {
           console.log("Firebase Auth State: User signed in:", user.email);
-          const name = user.displayName || 'Sri Siva Gayathri User';
-          const email = user.email || '';
-          const photoUrl = user.photoURL || '';
-          loginSuccess(name, email, photoUrl);
+          authData = {
+            name: user.displayName || 'Sri Siva Gayathri User',
+            email: user.email || '',
+            photoUrl: user.photoURL || ''
+          };
+          authStatus = 'success';
         } else {
           console.log("Firebase Auth State: No user signed in");
-          handleLogout();
+          authStatus = 'logout';
         }
+        authChecked = true;
+        handleStartupResolution();
       });
     }
 
@@ -1930,27 +1993,25 @@
       if (!fbConnected) {
         const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
         if (isLoggedIn) {
-          const name = localStorage.getItem('userName');
-          const email = localStorage.getItem('userEmail');
-          const photoUrl = localStorage.getItem('profileImageUrl');
-          loginSuccess(name, email, photoUrl);
+          authData = {
+            name: localStorage.getItem('userName'),
+            email: localStorage.getItem('userEmail'),
+            photoUrl: localStorage.getItem('profileImageUrl')
+          };
+          authStatus = 'success';
         } else {
-          handleLogout();
+          authStatus = 'logout';
         }
+        authChecked = true;
+        handleStartupResolution();
       }
     });
 
     // Splash timeout
     setTimeout(() => {
-      document.getElementById('splash-screen').classList.add('hidden');
-      
-      const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
-      if (isLoggedIn) {
-        // Let loginSuccess handle showing the dashboard
-      } else {
-        document.getElementById('login-screen').classList.remove('hidden');
-      }
-    }, 2000);
+      appLoaded = true;
+      handleStartupResolution();
+    }, 1500);
 
     // Language Telugu support translation keys
     const translations = {
@@ -2034,6 +2095,10 @@
       // Update settings screen profile info
       updateUserProfileUI(name, email, photoUrl);
 
+      // Hide splash screen just in case
+      const splash = document.getElementById('splash-screen');
+      if (splash) splash.classList.add('hidden');
+
       // Hide login screen
       document.getElementById('login-screen').classList.add('hidden');
       
@@ -2063,19 +2128,19 @@
         cancelText: 'Cancel',
         confirmBg: '#ef4444',
         onConfirm: function() {
-          performLogout();
+          performLogout(false);
         }
       });
     }
 
-    function performLogout() {
+    function performLogout(silent = false) {
       // Clear LocalStorage auth details
       localStorage.removeItem('userEmail');
       localStorage.removeItem('userName');
       localStorage.removeItem('profileImageUrl');
       localStorage.removeItem('isLoggedIn');
 
-      if (fbConnected && auth) {
+      if (fbConnected && auth && !silent) {
         auth.signOut().then(() => {
           console.log("Logged out from Firebase successfully");
         }).catch(err => {
@@ -2085,6 +2150,10 @@
 
       // Reset settings labels to defaults
       updateUserProfileUI('', '', '');
+
+      // Hide splash screen
+      const splash = document.getElementById('splash-screen');
+      if (splash) splash.classList.add('hidden');
 
       // Hide navigation and dashboard, show login
       document.getElementById('main-nav-bar').classList.add('hidden');
@@ -2186,52 +2255,92 @@
         prompt: 'select_account'
       });
 
-      auth.signInWithPopup(provider)
-        .then((result) => {
-          const user = result.user;
-          const name = user.displayName || 'Sri Siva Gayathri User';
-          const email = user.email || '';
-          const photoUrl = user.photoURL || '';
+      // Detect mobile device
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-          // Save user data to Firestore
-          db.collection('users').doc(user.uid).set({
-            uid: user.uid,
-            name: name,
-            email: email,
-            profileImage: photoUrl,
-            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true })
-          .then(() => {
-            console.log("User profile saved/updated in Firestore");
-            loginSuccess(name, email, photoUrl);
-          })
-          .catch((err) => {
-            console.error("Firestore save error: ", err);
-            // If firestore save fails (e.g. security rules or offline), we still let the user in locally since they authenticated
-            loginSuccess(name, email, photoUrl);
-          });
-        })
-        .catch((error) => {
-          console.error("Google Sign-In Error:", error);
+      if (isMobile) {
+        console.log("Firebase Auth: Mobile device detected. Using signInWithRedirect.");
+        auth.signInWithRedirect(provider).catch((error) => {
+          console.error("Google Sign-In Redirect Initiation Error:", error);
           if (btnText) btnText.innerText = 'Continue with Google';
           if (btn) btn.disabled = false;
-
-          // Show error to user
-          if (errorBox && errorMsg) {
-            errorMsg.innerText = error.message || "Google Sign-In failed.";
-            errorBox.style.display = 'flex';
-            errorBox.classList.remove('hidden');
-          } else {
-            showPremiumDialog({
-              title: 'Sign In Failed',
-              message: 'Google Sign-In failed: ' + error.message,
-              icon: 'fa-circle-xmark',
-              iconColor: 'var(--accent-red)',
-              iconBg: 'rgba(239, 68, 68, 0.15)',
-              confirmText: 'OK'
-            });
-          }
+          handleAuthError(error);
         });
+      } else {
+        console.log("Firebase Auth: Desktop device detected. Using signInWithPopup.");
+        auth.signInWithPopup(provider)
+          .then((result) => {
+            const user = result.user;
+            const name = user.displayName || 'Sri Siva Gayathri User';
+            const email = user.email || '';
+            const photoUrl = user.photoURL || '';
+
+            // Save user data to Firestore
+            db.collection('users').doc(user.uid).set({
+              uid: user.uid,
+              name: name,
+              email: email,
+              profileImage: photoUrl,
+              lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true })
+            .then(() => {
+              console.log("User profile saved/updated in Firestore");
+              loginSuccess(name, email, photoUrl);
+            })
+            .catch((err) => {
+              console.error("Firestore save error: ", err);
+              // If firestore save fails (e.g. security rules or offline), we still let the user in locally since they authenticated
+              loginSuccess(name, email, photoUrl);
+            });
+          })
+          .catch((error) => {
+            console.error("Google Sign-In Error:", error);
+            if (btnText) btnText.innerText = 'Continue with Google';
+            if (btn) btn.disabled = false;
+            handleAuthError(error);
+          });
+      }
+    }
+
+    function handleAuthError(error) {
+      const errorBox = document.getElementById('web-auth-error');
+      const errorMsg = document.getElementById('web-auth-error-msg');
+      
+      let message = error.message || "Google Sign-In failed.";
+      
+      if (error.code === 'auth/unauthorized-domain') {
+        const currentDomain = window.location.hostname;
+        
+        showPremiumDialog({
+          title: 'Unauthorized Domain',
+          message: `Your Netlify domain (<strong>${currentDomain}</strong>) is not authorized in Firebase.<br><br>` +
+                   `To fix this:<br>` +
+                   `1. Go to your <strong>Firebase Console</strong>.<br>` +
+                   `2. Select <strong>Authentication</strong> > <strong>Settings</strong> > <strong>Authorized domains</strong>.<br>` +
+                   `3. Click <strong>Add domain</strong> and enter <strong>${currentDomain}</strong>.`,
+          icon: 'fa-globe',
+          iconColor: 'var(--accent-orange)',
+          iconBg: 'rgba(249, 115, 22, 0.15)',
+          confirmText: 'Got It'
+        });
+        
+        message = `Unauthorized Domain: Please add "${currentDomain}" to Firebase Authorized Domains.`;
+      } else {
+        showPremiumDialog({
+          title: 'Sign In Failed',
+          message: 'Google Sign-In failed: ' + message,
+          icon: 'fa-circle-xmark',
+          iconColor: 'var(--accent-red)',
+          iconBg: 'rgba(239, 68, 68, 0.15)',
+          confirmText: 'OK'
+        });
+      }
+      
+      if (errorBox && errorMsg) {
+        errorMsg.innerText = message;
+        errorBox.style.display = 'flex';
+        errorBox.classList.remove('hidden');
+      }
     }
 
     function toggleTheme() {
