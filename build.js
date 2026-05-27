@@ -82,17 +82,28 @@ filesToCopy.forEach(fileName => {
   }
 });
 
-// 5. Copy and duplicate Logo assets to dist
+// 5. Copy and duplicate Logo assets to dist and root directories for PWA support
 const logoSrcPath = path.join(__dirname, 'assets', 'images', 'logo.png');
 if (fs.existsSync(logoSrcPath)) {
-  // Copy original logo.png
+  // Copy to dist/assets/images/
   fs.copyFileSync(logoSrcPath, path.join(distImagesDir, 'logo.png'));
-  console.log('🖼️ Copied original logo.png to dist/assets/images/');
-
-  // Create standard scaled duplicate names for PWA sizes
   fs.copyFileSync(logoSrcPath, path.join(distImagesDir, 'logo_192.png'));
   fs.copyFileSync(logoSrcPath, path.join(distImagesDir, 'logo_512.png'));
-  console.log('📱 Created PWA icon files: logo_192.png, logo_512.png');
+  console.log('🖼️ Copied logo assets to dist/assets/images/');
+
+  // Copy standard PWA icons to dist/ root for production
+  fs.copyFileSync(logoSrcPath, path.join(distDir, 'icon-192.png'));
+  fs.copyFileSync(logoSrcPath, path.join(distDir, 'icon-512.png'));
+  fs.copyFileSync(logoSrcPath, path.join(distDir, 'apple-touch-icon.png'));
+  fs.copyFileSync(logoSrcPath, path.join(distDir, 'favicon.ico'));
+  console.log('📱 Created PWA icons in dist/ root directory.');
+
+  // Copy standard PWA icons to repository root for local server testing
+  fs.copyFileSync(logoSrcPath, path.join(__dirname, 'icon-192.png'));
+  fs.copyFileSync(logoSrcPath, path.join(__dirname, 'icon-512.png'));
+  fs.copyFileSync(logoSrcPath, path.join(__dirname, 'apple-touch-icon.png'));
+  fs.copyFileSync(logoSrcPath, path.join(__dirname, 'favicon.ico'));
+  console.log('🏠 Created PWA icons in repository root directory.');
 } else {
   console.warn('⚠️ Warning: Original logo.png not found at assets/images/logo.png');
 }

@@ -5,11 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sri Siva Gayathri Enterprizes - Stock & Billing Manager</title>
   <!-- PWA & Mobile Install Support -->
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  
+  <!-- Apple Mobile Web App Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SSG Enterprizes">
-  <link rel="apple-touch-icon" href="assets/images/logo.png">
+  
+  <!-- Theme Color for Browser Toolbars -->
   <meta name="theme-color" content="#0f2027">
   <!-- Google Fonts Poppins -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1985,7 +1993,11 @@
       // Register Service Worker for PWA
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('[PWA] Service Worker registered scope:', reg.scope))
+          .then(reg => {
+            console.log('[PWA] Service Worker registered scope:', reg.scope);
+            // Force update check to bypass caching issues
+            reg.update();
+          })
           .catch(err => console.error('[PWA] Service Worker registration failed:', err));
       }
       

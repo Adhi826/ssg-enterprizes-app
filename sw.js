@@ -1,8 +1,12 @@
-const CACHE_NAME = 'ssg-billing-cache-v1';
+const CACHE_NAME = 'ssg-billing-cache-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/favicon.ico',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
   '/assets/images/logo.png',
   '/assets/images/logo_192.png',
   '/assets/images/logo_512.png',
@@ -44,7 +48,7 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch Event (Network-first with Cache-fallback for dynamic elements, Cache-first for static library APIs)
+// Fetch Event (Network-first with Cache-fallback for local assets, Cache-first for static CDN APIs)
 self.addEventListener('fetch', event => {
   // Let browser handle non-GET requests natively
   if (event.request.method !== 'GET') return;
