@@ -1,0 +1,22 @@
+# Netlify build output
+dist/
+
+# Local configuration fallback
+.env
+.env.local
+
+# Dependency directories
+node_modules/
+
+# Flutter build outputs and cache files
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.apk
+*.aab
+
+# OS files
+.DS_Store
+Thumbs.db
