@@ -1594,13 +1594,28 @@
     let authStatus = null;
 
     function handleStartupResolution() {
+      // Restore cached local session instantly to prevent any login screen flicker
+      const isLoggedInLocal = localStorage.getItem('isLoggedIn') === 'true';
+      if (isLoggedInLocal) {
+        const cachedName = localStorage.getItem('userName');
+        const cachedEmail = localStorage.getItem('userEmail');
+        const cachedPhoto = localStorage.getItem('profileImageUrl');
+        loginSuccess(cachedName, cachedEmail, cachedPhoto);
+        
+        // Hide splash screen immediately
+        const splash = document.getElementById('splash-screen');
+        if (splash) splash.classList.add('hidden');
+      }
+
       if (appLoaded && authChecked) {
         const splash = document.getElementById('splash-screen');
         if (splash) splash.classList.add('hidden');
 
         if (authStatus === 'success' && authData) {
+          // Firebase confirmed successful sign-in
           loginSuccess(authData.name, authData.email, authData.photoUrl);
-        } else {
+        } else if (authStatus === 'logout') {
+          // Firebase says the session is invalid or logged out
           performLogout(true);
         }
       }
@@ -1853,36 +1868,7 @@
     function setupFirebaseListeners() {
       if (!fbConnected) return;
 
-      // Check redirect result first
-      auth.getRedirectResult()
-        .then((result) => {
-          if (result && result.user) {
-            const user = result.user;
-            console.log("Firebase Auth: Redirect sign-in success for", user.email);
-            const name = user.displayName || 'Sri Siva Gayathri User';
-            const email = user.email || '';
-            const photoUrl = user.photoURL || '';
 
-            // Save user data to Firestore
-            db.collection('users').doc(user.uid).set({
-              uid: user.uid,
-              name: name,
-              email: email,
-              profileImage: photoUrl,
-              lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true })
-            .then(() => {
-              console.log("User profile saved/updated in Firestore via redirect");
-            })
-            .catch((err) => {
-              console.error("Firestore save error: ", err);
-            });
-          }
-        })
-        .catch((error) => {
-          console.error("Redirect Sign-In Error:", error);
-          handleAuthError(error);
-        });
 
       // Real-time listener for Products collection
       db.collection('products').onSnapshot(snapshot => {
@@ -2267,51 +2253,38 @@
         prompt: 'select_account'
       });
 
-      // Detect mobile device
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      console.log("Firebase Auth: Initiating Google Sign-In using signInWithPopup.");
+      auth.signInWithPopup(provider)
+        .then((result) => {
+          const user = result.user;
+          const name = user.displayName || 'Sri Siva Gayathri User';
+          const email = user.email || '';
+          const photoUrl = user.photoURL || '';
 
-      if (isMobile) {
-        console.log("Firebase Auth: Mobile device detected. Using signInWithRedirect.");
-        auth.signInWithRedirect(provider).catch((error) => {
-          console.error("Google Sign-In Redirect Initiation Error:", error);
+          // Save user data to Firestore
+          db.collection('users').doc(user.uid).set({
+            uid: user.uid,
+            name: name,
+            email: email,
+            profileImage: photoUrl,
+            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true })
+          .then(() => {
+            console.log("User profile saved/updated in Firestore");
+            loginSuccess(name, email, photoUrl);
+          })
+          .catch((err) => {
+            console.error("Firestore save error: ", err);
+            // If firestore save fails (e.g. security rules or offline), we still let the user in locally since they authenticated
+            loginSuccess(name, email, photoUrl);
+          });
+        })
+        .catch((error) => {
+          console.error("Google Sign-In Error:", error);
           if (btnText) btnText.innerText = 'Continue with Google';
           if (btn) btn.disabled = false;
           handleAuthError(error);
         });
-      } else {
-        console.log("Firebase Auth: Desktop device detected. Using signInWithPopup.");
-        auth.signInWithPopup(provider)
-          .then((result) => {
-            const user = result.user;
-            const name = user.displayName || 'Sri Siva Gayathri User';
-            const email = user.email || '';
-            const photoUrl = user.photoURL || '';
-
-            // Save user data to Firestore
-            db.collection('users').doc(user.uid).set({
-              uid: user.uid,
-              name: name,
-              email: email,
-              profileImage: photoUrl,
-              lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true })
-            .then(() => {
-              console.log("User profile saved/updated in Firestore");
-              loginSuccess(name, email, photoUrl);
-            })
-            .catch((err) => {
-              console.error("Firestore save error: ", err);
-              // If firestore save fails (e.g. security rules or offline), we still let the user in locally since they authenticated
-              loginSuccess(name, email, photoUrl);
-            });
-          })
-          .catch((error) => {
-            console.error("Google Sign-In Error:", error);
-            if (btnText) btnText.innerText = 'Continue with Google';
-            if (btn) btn.disabled = false;
-            handleAuthError(error);
-          });
-      }
     }
 
     function handleAuthError(error) {
