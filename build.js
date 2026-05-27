@@ -12,7 +12,31 @@ if (!fs.existsSync(distImagesDir)) {
   console.log('📁 Created directory structure: dist/assets/images');
 }
 
-// 2. Load Environment Variables from Netlify
+// Load local .env file if it exists (for local test builds)
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  try {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    envContent.split(/\r?\n/).forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const index = trimmed.indexOf('=');
+        if (index > -1) {
+          const key = trimmed.substring(0, index).trim();
+          const val = trimmed.substring(index + 1).trim();
+          if (key && val) {
+            process.env[key] = val;
+          }
+        }
+      }
+    });
+    console.log('📝 Loaded local environment variables from .env file.');
+  } catch(e) {
+    console.warn('⚠️ Warning: Failed to parse local .env file:', e.message);
+  }
+}
+
+// 2. Load Environment Variables from Netlify or local process.env
 const apiKey = process.env.FIREBASE_API_KEY || '___FIREBASE_API_KEY___';
 const projectId = process.env.FIREBASE_PROJECT_ID || '___FIREBASE_PROJECT_ID___';
 const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || (projectId && projectId !== '___FIREBASE_PROJECT_ID___' ? `${projectId}.appspot.com` : '___FIREBASE_STORAGE_BUCKET___');
