@@ -1632,6 +1632,14 @@
     // Firestore listener unsubscribe array
     let fbUnsubscribes = [];
 
+    // Helper method to scope business collections under the authenticated user's UID
+    function getUserCollection(collectionName) {
+      if (!auth || !auth.currentUser) {
+        throw new Error("User must be authenticated to access Firestore.");
+      }
+      return db.collection('users').doc(auth.currentUser.uid).collection(collectionName);
+    }
+
     // State arrays — Firestore is the single source of truth; always start empty
     let products = [];
     let stockLogs = [];
@@ -1962,7 +1970,7 @@
       }
 
       // Products
-      const unsubProducts = db.collection('products').onSnapshot(snapshot => {
+      const unsubProducts = getUserCollection('products').onSnapshot(snapshot => {
         console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'products'. Fetch count: ${snapshot.size}`);
         products = [];
         snapshot.forEach(doc => products.push({ id: doc.id, ...doc.data() }));
@@ -1979,7 +1987,7 @@
       fbUnsubscribes.push(unsubProducts);
 
       // Stock Logs
-      const unsubStock = db.collection('stock_logs').orderBy('timestamp', 'desc').limit(40).onSnapshot(snapshot => {
+      const unsubStock = getUserCollection('stock_logs').orderBy('timestamp', 'desc').limit(40).onSnapshot(snapshot => {
         console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'stock_logs'. Fetch count: ${snapshot.size}`);
         stockLogs = [];
         snapshot.forEach(doc => stockLogs.push({ id: doc.id, ...doc.data() }));
@@ -1990,7 +1998,7 @@
       fbUnsubscribes.push(unsubStock);
 
       // Invoices
-      const unsubInvoices = db.collection('invoices').orderBy('timestamp', 'desc').limit(40).onSnapshot(snapshot => {
+      const unsubInvoices = getUserCollection('invoices').orderBy('timestamp', 'desc').limit(40).onSnapshot(snapshot => {
         console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'invoices'. Fetch count: ${snapshot.size}`);
         invoices = [];
         snapshot.forEach(doc => invoices.push(normalizeInvoice({ id: doc.id, ...doc.data() })));
@@ -2001,7 +2009,7 @@
       fbUnsubscribes.push(unsubInvoices);
 
       // Deleted Products (Recycle Bin)
-      const unsubDeleted = db.collection('deleted_products').onSnapshot(snapshot => {
+      const unsubDeleted = getUserCollection('deleted_products').onSnapshot(snapshot => {
         console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'deleted_products'. Fetch count: ${snapshot.size}`);
         deletedProducts = [];
         snapshot.forEach(doc => deletedProducts.push({ id: doc.id, ...doc.data() }));
@@ -2012,7 +2020,7 @@
       fbUnsubscribes.push(unsubDeleted);
 
       // Stock History
-      const unsubHistory = db.collection('stock_history').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
+      const unsubHistory = getUserCollection('stock_history').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
         console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'stock_history'. Fetch count: ${snapshot.size}`);
         stockHistory = [];
         snapshot.forEach(doc => stockHistory.push({ id: doc.id, ...doc.data() }));
@@ -2022,7 +2030,7 @@
       fbUnsubscribes.push(unsubHistory);
 
       // Customer Dues
-      const unsubDues = db.collection('customer_dues').onSnapshot(snapshot => {
+      const unsubDues = getUserCollection('customer_dues').onSnapshot(snapshot => {
         console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'customer_dues'. Fetch count: ${snapshot.size}`);
         customerDues = [];
         snapshot.forEach(doc => customerDues.push({ id: doc.id, ...doc.data() }));
@@ -2034,7 +2042,7 @@
       fbUnsubscribes.push(unsubDues);
 
       // Payment History
-      const unsubPayments = db.collection('payment_history').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
+      const unsubPayments = getUserCollection('payment_history').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
         console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'payment_history'. Fetch count: ${snapshot.size}`);
         paymentHistory = [];
         snapshot.forEach(doc => paymentHistory.push({ id: doc.id, ...doc.data() }));
@@ -3002,10 +3010,10 @@
         if (fbConnected) {
           console.log(`💾 [Firestore Write] Saving edit to document 'products/${id}'`);
           const batch = db.batch();
-          const prodRef = db.collection('products').doc(id);
+          const prodRef = getUserCollection('products').doc(id);
           batch.set(prodRef, pData, { merge: true });
           // Record history
-          const histRef = db.collection('stock_history').doc();
+          const histRef = getUserCollection('stock_history').doc();
           batch.set(histRef, {
             productId: id, productName: name, actionType: 'Edited',
             timestamp: now, userName: 'Admin',
@@ -3047,11 +3055,11 @@
         if (fbConnected) {
           console.log(`💾 [Firestore Write] Creating new product document...`);
           const batch = db.batch();
-          const prodRef = db.collection('products').doc();
+          const prodRef = getUserCollection('products').doc();
           pData.id = prodRef.id;
           batch.set(prodRef, pData);
           // Record history
-          const histRef = db.collection('stock_history').doc();
+          const histRef = getUserCollection('stock_history').doc();
           batch.set(histRef, {
             productId: prodRef.id, productName: name, actionType: 'Added',
             timestamp: now, userName: 'Admin',
@@ -3119,13 +3127,13 @@
       if (fbConnected && db) {
         console.log(`💾 [Firestore Write] Deleting product 'products/${id}' and moving to recycle bin`);
         const batch = db.batch();
-        const delRef = db.collection('deleted_products').doc(id);
+        const delRef = getUserCollection('deleted_products').doc(id);
         batch.set(delRef, { ...p, isDeleted: true, deletedAt: now });
 
-        const prodRef = db.collection('products').doc(id);
+        const prodRef = getUserCollection('products').doc(id);
         batch.delete(prodRef);
 
-        const histRef = db.collection('stock_history').doc();
+        const histRef = getUserCollection('stock_history').doc();
         batch.set(histRef, {
           productId: id,
           productName: p.name,
@@ -3327,12 +3335,12 @@
       if (fbConnected && db) {
         const batch = db.batch();
         productsToAdd.forEach(pData => {
-          const prodRef = db.collection('products').doc();
+          const prodRef = getUserCollection('products').doc();
           pData.id = prodRef.id;
           pData.createdAt = now;
           pData.updatedAt = now;
           batch.set(prodRef, pData);
-          const histRef = db.collection('stock_history').doc();
+          const histRef = getUserCollection('stock_history').doc();
           batch.set(histRef, {
             productId: prodRef.id, productName: pData.name, actionType: 'Added',
             timestamp: now, userName: 'Admin',
@@ -3516,12 +3524,12 @@
             currentBatch = db.batch();
             opsInBatch = 0;
           }
-          const prodRef = db.collection('products').doc();
+          const prodRef = getUserCollection('products').doc();
           pData.id = prodRef.id;
           pData.createdAt = now;
           pData.updatedAt = now;
           currentBatch.set(prodRef, pData);
-          const histRef = db.collection('stock_history').doc();
+          const histRef = getUserCollection('stock_history').doc();
           currentBatch.set(histRef, {
             productId: prodRef.id, productName: pData.name, actionType: 'Added',
             timestamp: now, userName: 'Admin',
@@ -3657,8 +3665,8 @@
 
       if (fbConnected) {
         const batch = db.batch();
-        const logRef = db.collection('stock_logs').doc();
-        const prodRef = db.collection('products').doc(prodId);
+        const logRef = getUserCollection('stock_logs').doc();
+        const prodRef = getUserCollection('products').doc(prodId);
         
         batch.set(logRef, { ...logData, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
         batch.update(prodRef, { quantity: newQty });
@@ -4035,64 +4043,64 @@
           try {
             var batch = db.batch();
 
-            // Save invoice to Firestore with full parity dual fields
-            var invRef = db.collection('invoices').doc(newId);
-            var fbInvData = Object.assign({}, invData);
-            
-            // Populate Flutter model fields for compatibility
-            fbInvData.subTotal = invData.subtotal;
-            fbInvData.grandTotal = invData.grandtotal;
-            fbInvData.discountAmount = invData.discount;
-            fbInvData.paymentStatus = invData.status;
-            fbInvData.date = new Date().toISOString(); // Flutter expects ISO8601
-            
-            // Map items with both unitPrice and price
-            fbInvData.items = invData.items.map(function(item) {
-              return {
-                productId: item.productId,
-                productName: item.productName,
-                brandName: item.brandName || '',
-                stockType: item.stockType || 'Single',
-                quantity: item.quantity,
-                unitPrice: item.price,
-                price: item.price,
-                total: item.total
-              };
-            });
-            
-            fbInvData.timestamp = firebase.firestore.FieldValue.serverTimestamp();
-            batch.set(invRef, fbInvData);
-
-            if (remainingAmount > 0) {
-              const dueId = 'due_' + newId.replace('fb_', '').replace('i_', '');
-              const dueRef = db.collection('customer_dues').doc(dueId);
-              const fbDueData = {
-                id: dueId,
-                customerName: cust,
-                customerPhone: phone,
-                invoiceId: newId,
-                invoiceNumber: invoiceNumber,
-                totalAmount: grandtotal,
-                paidAmount: paidAmount,
-                remainingAmount: remainingAmount,
-                date: new Date().toISOString(),
-                dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-                status: invoiceStatus,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-              };
-              batch.set(dueRef, fbDueData);
-            }
-
-            // Update product quantities in Firestore
-            invData.items.forEach(function(item) {
-              if (!item.isCustom) {
-                var p = products.find(function(prod) { return prod.id === item.productId; });
-                if (p) {
-                  var prodRef = db.collection('products').doc(item.productId);
-                  batch.update(prodRef, { quantity: p.quantity });
-                }
-              }
-            });
+             // Save invoice to Firestore with full parity dual fields
+             var invRef = getUserCollection('invoices').doc(newId);
+             var fbInvData = Object.assign({}, invData);
+             
+             // Populate Flutter model fields for compatibility
+             fbInvData.subTotal = invData.subtotal;
+             fbInvData.grandTotal = invData.grandtotal;
+             fbInvData.discountAmount = invData.discount;
+             fbInvData.paymentStatus = invData.status;
+             fbInvData.date = new Date().toISOString(); // Flutter expects ISO8601
+             
+             // Map items with both unitPrice and price
+             fbInvData.items = invData.items.map(function(item) {
+               return {
+                 productId: item.productId,
+                 productName: item.productName,
+                 brandName: item.brandName || '',
+                 stockType: item.stockType || 'Single',
+                 quantity: item.quantity,
+                 unitPrice: item.price,
+                 price: item.price,
+                 total: item.total
+               };
+             });
+             
+             fbInvData.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+             batch.set(invRef, fbInvData);
+ 
+             if (remainingAmount > 0) {
+               const dueId = 'due_' + newId.replace('fb_', '').replace('i_', '');
+               const dueRef = getUserCollection('customer_dues').doc(dueId);
+               const fbDueData = {
+                 id: dueId,
+                 customerName: cust,
+                 customerPhone: phone,
+                 invoiceId: newId,
+                 invoiceNumber: invoiceNumber,
+                 totalAmount: grandtotal,
+                 paidAmount: paidAmount,
+                 remainingAmount: remainingAmount,
+                 date: new Date().toISOString(),
+                 dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+                 status: invoiceStatus,
+                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
+               };
+               batch.set(dueRef, fbDueData);
+             }
+ 
+             // Update product quantities in Firestore
+             invData.items.forEach(function(item) {
+               if (!item.isCustom) {
+                 var p = products.find(function(prod) { return prod.id === item.productId; });
+                 if (p) {
+                   var prodRef = getUserCollection('products').doc(item.productId);
+                   batch.update(prodRef, { quantity: p.quantity });
+                 }
+               }
+             });
 
             batch.commit()
               .then(function() {
@@ -4415,13 +4423,13 @@
 
       if (fbConnected && db) {
         const batch = db.batch();
-        const prodRef = db.collection('products').doc(id);
+        const prodRef = getUserCollection('products').doc(id);
         batch.set(prodRef, { ...cleanProduct, isDeleted: false });
 
-        const delRef = db.collection('deleted_products').doc(id);
+        const delRef = getUserCollection('deleted_products').doc(id);
         batch.delete(delRef);
 
-        const histRef = db.collection('stock_history').doc();
+        const histRef = getUserCollection('stock_history').doc();
         batch.set(histRef, {
           productId: id,
           productName: p.name,
@@ -4479,7 +4487,7 @@
       renderRecycleBin();
 
       if (fbConnected && db) {
-        db.collection('deleted_products').doc(id).delete()
+        getUserCollection('deleted_products').doc(id).delete()
           .then(() => {
             console.log('Permanently deleted from Firestore.');
             showToast('Product "' + p.name + '" deleted permanently.', 'success');
@@ -4799,7 +4807,7 @@
         var batch = db.batch();
 
         // Delete invoice doc from Firestore
-        var invRef = db.collection('invoices').doc(invId);
+        var invRef = getUserCollection('invoices').doc(invId);
         batch.delete(invRef);
 
         // Update product quantities in Firestore
@@ -4808,7 +4816,7 @@
             if (!item.isCustom) {
               var p = products.find(function(prod) { return prod.id === item.productId; });
               if (p) {
-                var prodRef = db.collection('products').doc(item.productId);
+                var prodRef = getUserCollection('products').doc(item.productId);
                 batch.update(prodRef, { quantity: p.quantity });
               }
             }
@@ -4816,7 +4824,7 @@
         }
 
         // Add history log to Firestore
-        var histRef = db.collection('stock_history').doc();
+        var histRef = getUserCollection('stock_history').doc();
         batch.set(histRef, {
           productId: invId,
           productName: 'Invoice ' + invNo,
@@ -4927,7 +4935,7 @@
         const batch = db.batch();
 
         // Update customer_dues document
-        const dueRef = db.collection('customer_dues').doc(activeRepaymentDueId);
+        const dueRef = getUserCollection('customer_dues').doc(activeRepaymentDueId);
         batch.update(dueRef, {
           paidAmount: due.paidAmount,
           remainingAmount: due.remainingAmount,
@@ -4937,7 +4945,7 @@
 
         // Update invoice document
         if (inv) {
-          const invRef = db.collection('invoices').doc(inv.id);
+          const invRef = getUserCollection('invoices').doc(inv.id);
           batch.update(invRef, {
             paidAmount: inv.paidAmount,
             remainingAmount: inv.remainingAmount,
@@ -4947,7 +4955,7 @@
         }
 
         // Add payment_history record
-        const payRef = db.collection('payment_history').doc(newPayId);
+        const payRef = getUserCollection('payment_history').doc(newPayId);
         const fbPaymentRec = Object.assign({}, paymentRec);
         fbPaymentRec.timestamp = firebase.firestore.FieldValue.serverTimestamp();
         batch.set(payRef, fbPaymentRec);

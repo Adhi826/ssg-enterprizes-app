@@ -14,6 +14,15 @@ class FirebaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
+  // Helper method to scope business collections under the authenticated user's UID
+  CollectionReference<Map<String, dynamic>> _userCollection(String collectionName) {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      throw Exception("User must be authenticated to access Firestore.");
+    }
+    return _db.collection('users').doc(uid).collection(collectionName);
+  }
+
   // ─── AUTHENTICATION SERVICES ─────────────────────────────────
   
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -45,7 +54,7 @@ class FirebaseService {
   // ─── PRODUCT / INVENTORY SERVICES ───────────────────────────
 
   Stream<List<Product>> getProductsStream() {
-    return _db.collection('products').snapshots().map((snapshot) {
+    return _userCollection('products').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data();
         // Set document id into product model
@@ -57,7 +66,8 @@ class FirebaseService {
 
   Future<void> saveProduct(Product product, {String userName = 'Admin', bool isEdit = false}) async {
     final batch = _db.batch();
-    final docRef = _db.collection('products').doc(product.id.isEmpty ? null : product.id);
+    final col = _userCollection('products');
+    final docRef = col.doc(product.id.isEmpty ? null : product.id);
     final productMap = product.toMap();
     if (product.id.isEmpty) {
       productMap['id'] = docRef.id;
@@ -69,7 +79,7 @@ class FirebaseService {
     batch.set(docRef, productMap, SetOptions(merge: true));
 
     // Also record history
-    final histRef = _db.collection('stock_history').doc();
+    final histRef = _userCollection('stock_history').doc();
     final hist = StockHistory(
       id: histRef.id,
       productId: productMap['id'],
@@ -89,17 +99,17 @@ class FirebaseService {
     final batch = _db.batch();
     
     // Move to deleted_products collection
-    final delRef = _db.collection('deleted_products').doc(product.id);
+    final delRef = _userCollection('deleted_products').doc(product.id);
     final prodMap = product.copyWith(isDeleted: true).toMap();
     prodMap['deletedAt'] = DateTime.now().toIso8601String();
     batch.set(delRef, prodMap);
     
     // Remove from active products
-    final prodRef = _db.collection('products').doc(product.id);
+    final prodRef = _userCollection('products').doc(product.id);
     batch.delete(prodRef);
 
     // Record history
-    final histRef = _db.collection('stock_history').doc();
+    final histRef = _userCollection('stock_history').doc();
     final hist = StockHistory(
       id: histRef.id,
       productId: product.id,
@@ -116,7 +126,7 @@ class FirebaseService {
   }
 
   Stream<List<Product>> getDeletedProductsStream() {
-    return _db.collection('deleted_products').snapshots().map((snapshot) {
+    return _userCollection('deleted_products').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) => Product.fromMap(doc.data())).toList();
     });
   }
@@ -125,15 +135,15 @@ class FirebaseService {
     final batch = _db.batch();
     
     // Add back to active products
-    final prodRef = _db.collection('products').doc(product.id);
+    final prodRef = _userCollection('products').doc(product.id);
     batch.set(prodRef, product.copyWith(isDeleted: false).toMap());
     
     // Remove from deleted products
-    final delRef = _db.collection('deleted_products').doc(product.id);
+    final delRef = _userCollection('deleted_products').doc(product.id);
     batch.delete(delRef);
 
     // Record history
-    final histRef = _db.collection('stock_history').doc();
+    final histRef = _userCollection('stock_history').doc();
     final hist = StockHistory(
       id: histRef.id,
       productId: product.id,
@@ -150,14 +160,13 @@ class FirebaseService {
   }
 
   Future<void> permanentlyDeleteProduct(String id) async {
-    await _db.collection('deleted_products').doc(id).delete();
+    await _userCollection('deleted_products').doc(id).delete();
   }
 
   // ─── STOCK ENTRY MOVEMENT SERVICES ─────────────────────────
 
   Stream<List<StockEntry>> getStockEntriesStream() {
-    return _db
-        .collection('stock_logs')
+    return _userCollection('stock_logs')
         .orderBy('dateTime', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -173,19 +182,19 @@ class FirebaseService {
     final batch = _db.batch();
     
     for (var entry in entries) {
-      final logRef = _db.collection('stock_logs').doc();
+      final logRef = _userCollection('stock_logs').doc();
       final entryMap = entry.toMap();
       entryMap['id'] = logRef.id;
       batch.set(logRef, entryMap);
       
       final product = currentProductsMap[entry.productId];
       if (product != null) {
-        final prodRef = _db.collection('products').doc(entry.productId);
+        final prodRef = _userCollection('products').doc(entry.productId);
         int newQty = product.quantity + (entry.type == 'Incoming' ? entry.quantity : -entry.quantity);
         batch.update(prodRef, {'quantity': newQty});
 
         // Record history
-        final histRef = _db.collection('stock_history').doc();
+        final histRef = _userCollection('stock_history').doc();
         final hist = StockHistory(
           id: histRef.id,
           productId: product.id,
@@ -205,8 +214,7 @@ class FirebaseService {
   }
 
   Stream<List<StockHistory>> getStockHistoryStream() {
-    return _db
-        .collection('stock_history')
+    return _userCollection('stock_history')
         .orderBy('timestamp', descending: true)
         .limit(100)
         .snapshots()
@@ -218,8 +226,7 @@ class FirebaseService {
   // ─── BILLING / INVOICE SERVICES ────────────────────────────
 
   Stream<List<Invoice>> getInvoicesStream() {
-    return _db
-        .collection('invoices')
+    return _userCollection('invoices')
         .orderBy('date', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -234,7 +241,7 @@ class FirebaseService {
   Future<void> saveInvoice(Invoice invoice, Map<String, int> updatedProductQuantities, {CustomerDue? due}) async {
     final batch = _db.batch();
     
-    final invRef = _db.collection('invoices').doc(invoice.id.isEmpty ? null : invoice.id);
+    final invRef = _userCollection('invoices').doc(invoice.id.isEmpty ? null : invoice.id);
     final invoiceMap = invoice.toMap();
     if (invoice.id.isEmpty) {
       invoiceMap['id'] = invRef.id;
@@ -244,12 +251,12 @@ class FirebaseService {
     
     // Deduct stock for each item in the invoice
     updatedProductQuantities.forEach((prodId, newQty) {
-      final prodRef = _db.collection('products').doc(prodId);
+      final prodRef = _userCollection('products').doc(prodId);
       batch.update(prodRef, {'quantity': newQty});
     });
 
     if (due != null) {
-      final dueRef = _db.collection('customer_dues').doc(due.id.isEmpty ? null : due.id);
+      final dueRef = _userCollection('customer_dues').doc(due.id.isEmpty ? null : due.id);
       final dueMap = due.toMap();
       if (due.id.isEmpty) {
         dueMap['id'] = dueRef.id;
@@ -261,13 +268,13 @@ class FirebaseService {
   }
 
   Future<void> deleteInvoice(String invoiceId) async {
-    await _db.collection('invoices').doc(invoiceId).delete();
+    await _userCollection('invoices').doc(invoiceId).delete();
   }
 
   // ─── CUSTOMER DUE / REPAYMENT SERVICES ─────────────────────────
 
   Stream<List<CustomerDue>> getCustomerDuesStream() {
-    return _db.collection('customer_dues').snapshots().map((snapshot) {
+    return _userCollection('customer_dues').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
@@ -277,8 +284,7 @@ class FirebaseService {
   }
 
   Stream<List<PaymentRecord>> getPaymentHistoryStream() {
-    return _db
-        .collection('payment_history')
+    return _userCollection('payment_history')
         .orderBy('date', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -291,7 +297,7 @@ class FirebaseService {
   }
 
   Future<void> saveCustomerDue(CustomerDue due) async {
-    await _db.collection('customer_dues').doc(due.id).set(due.toMap(), SetOptions(merge: true));
+    await _userCollection('customer_dues').doc(due.id).set(due.toMap(), SetOptions(merge: true));
   }
 
   Future<void> recordRepayment({
@@ -302,7 +308,7 @@ class FirebaseService {
     final batch = _db.batch();
     
     // Add payment history record
-    final payRef = _db.collection('payment_history').doc(payment.id.isEmpty ? null : payment.id);
+    final payRef = _userCollection('payment_history').doc(payment.id.isEmpty ? null : payment.id);
     final payMap = payment.toMap();
     if (payment.id.isEmpty) {
       payMap['id'] = payRef.id;
@@ -310,11 +316,11 @@ class FirebaseService {
     batch.set(payRef, payMap);
 
     // Update customer due record
-    final dueRef = _db.collection('customer_dues').doc(due.id);
+    final dueRef = _userCollection('customer_dues').doc(due.id);
     batch.set(dueRef, due.toMap(), SetOptions(merge: true));
 
     // Update invoice record
-    final invRef = _db.collection('invoices').doc(invoice.id);
+    final invRef = _userCollection('invoices').doc(invoice.id);
     batch.set(invRef, invoice.toMap(), SetOptions(merge: true));
 
     await batch.commit();
