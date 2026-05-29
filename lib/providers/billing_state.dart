@@ -177,47 +177,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     }
   }
 
-  void _loadSampleBills() {
-    final now = DateTime.now();
-    final billsList = [
-      Invoice(
-        id: 'inv_1',
-        invoiceNumber: 'SSGE-2026-101',
-        customerName: 'Krishna Kirana Store',
-        customerPhone: '7036657769',
-        items: [
-          InvoiceItem(
-            productId: 'prod_1',
-            productName: 'Bisleri Mineral Water 1L',
-            brandName: 'Bisleri',
-            stockType: 'Single',
-            quantity: 50,
-            unitPrice: 20.0,
-            total: 1000.0,
-          ),
-          InvoiceItem(
-            productId: 'prod_4',
-            productName: 'Sprite Carton (24 Cans)',
-            brandName: 'Coca Cola',
-            stockType: 'Carton',
-            quantity: 2,
-            unitPrice: 480.0,
-            total: 960.0,
-          )
-        ],
-        subTotal: 1960.0,
-        gstPercentage: 18.0,
-        gstAmount: 352.8,
-        discountAmount: 100.0,
-        grandTotal: 2212.8,
-        paymentStatus: 'Paid',
-        date: now.subtract(const Duration(days: 3)),
-        notes: 'Rajampalli warehouse delivery',
-      )
-    ];
 
-    state = state.copyWith(invoices: billsList);
-  }
 
   void setCustomerDetails(String name, String phone) {
     state = state.copyWith(customerName: name, customerPhone: phone);

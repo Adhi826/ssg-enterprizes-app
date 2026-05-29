@@ -420,6 +420,10 @@
       100% { opacity: 0.3; }
     }
 
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .alert-text {
       font-size: 11px;
       font-weight: 500;
@@ -860,7 +864,12 @@
         <i class="fa-solid fa-bell" style="font-size: 18px; color: var(--accent-cyan); cursor: pointer;" onclick="checkNotifications()"></i>
       </div>
       
-      <div class="scrollable">
+      <!-- Dashboard Sync Loader overlay -->
+      <div id="dashboard-sync-loader" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:50;background:rgba(15,23,42,0.7);backdrop-filter:blur(6px);justify-content:center;align-items:center;flex-direction:column;gap:14px;">
+        <div style="width:44px;height:44px;border:3px solid rgba(0,242,254,0.2);border-top:3px solid var(--accent-cyan);border-radius:50%;animation:spin 0.9s linear infinite;"></div>
+        <span style="font-size:12px;color:var(--accent-cyan);font-weight:500;letter-spacing:0.5px;">Syncing from Cloud...</span>
+      </div>
+      <div class="scrollable" id="dashboard-main-content">
         <!-- Low Stock Alert Box -->
         <div id="low-stock-alert" class="alert-banner hidden">
           <i class="fa-solid fa-triangle-exclamation"></i>
@@ -1620,27 +1629,13 @@
     let storage = null;
     let fbConnected = false;
 
-    // State arrays with premium sample items matching warehouse products
-    let products = [
-      { id: 'p1', name: 'Bisleri Mineral Water', brand: 'Bisleri', category: 'Water', stockType: 'Single', quantity: 120, minQuantity: 20, price: 20.0, supplier: 'Bisleri Distributors', barcode: '8906001300015', imageUrl: '' },
-      { id: 'p2', name: 'Kinley Water Case', brand: 'Kinley', category: 'Water', stockType: 'Case', quantity: 15, minQuantity: 5, price: 240.0, supplier: 'Coca Cola Beverages', barcode: '8901764032128', imageUrl: '' },
-      { id: 'p3', name: 'Thums Up Can', brand: 'Coca Cola', category: 'Soft Drinks', stockType: 'Single', quantity: 8, minQuantity: 15, price: 40.0, supplier: 'Sri Balaji Agencies', barcode: '8901764022204', imageUrl: '' },
-      { id: 'p4', name: 'Sprite Carton', brand: 'Coca Cola', category: 'Soft Drinks', stockType: 'Carton', quantity: 25, minQuantity: 8, price: 480.0, supplier: 'Sri Balaji Agencies', barcode: '8901764012229', imageUrl: '' },
-      { id: 'p5', name: 'Coca Cola Bottle', brand: 'Coca Cola', category: 'Soft Drinks', stockType: 'Single', quantity: 90, minQuantity: 20, price: 35.0, supplier: 'Sri Balaji Agencies', barcode: '8901764061227', imageUrl: '' },
-      { id: 'p6', name: 'Aquafina Water Bottle', brand: 'Aquafina', category: 'Water', stockType: 'Single', quantity: 4, minQuantity: 15, price: 20.0, supplier: 'PepsiCo India', barcode: '8902083010118', imageUrl: '' }
-    ];
+    // Firestore listener unsubscribe array
+    let fbUnsubscribes = [];
 
-    let stockLogs = [
-      { id: 's1', type: 'Incoming', time: '23-May-2026 09:15 AM', productName: 'Bisleri Mineral Water', brand: 'Bisleri', qty: 50, recorder: 'Ramesh Kumar', notes: 'Weekly refill' },
-      { id: 's2', type: 'Outgoing', time: '23-May-2026 11:20 AM', productName: 'Thums Up Can', brand: 'Coca Cola', qty: 12, recorder: 'Suresh Kumar', notes: 'Sold to local grocery' }
-    ];
-
-    let invoices = [
-      { id: 'i1', invoiceNumber: 'SSGE-2026-101', customerName: 'Krishna Kirana Store', date: '23-May-2026', subtotal: 1960.0, gst: 352.8, discount: 100.0, grandtotal: 2212.8, status: 'Paid', items: [
-        { productName: 'Bisleri Mineral Water', quantity: 50, price: 20, total: 1000 },
-        { productName: 'Sprite Carton', quantity: 2, price: 480, total: 960 }
-      ] }
-    ];
+    // State arrays — Firestore is the single source of truth; always start empty
+    let products = [];
+    let stockLogs = [];
+    let invoices = [];
 
     let cart = [];
     let activeStockType = 'Incoming';
@@ -1860,6 +1855,7 @@
             badge.style.color = 'var(--accent-cyan)';
           }
 
+          // Register auth state listener — sync starts only AFTER auth is confirmed
           setupFirebaseListeners();
         } catch (e) {
           console.error("Firebase Initialization Failed: ", e);
@@ -1945,107 +1941,160 @@
       }
     }
 
-    function setupFirebaseListeners() {
-      if (!fbConnected) return;
+    // ═══════════════════════════════════════════════════════════════
+    // REALTIME SYNC — starts/stops based on Firebase Auth state
+    // ═══════════════════════════════════════════════════════════════
 
+    function startRealtimeSync() {
+      console.log('🔄 [Firestore Realtime Sync] Starting Firestore realtime sync...');
+      stopRealtimeSync(); // Cancel any stale listeners first
 
+      // Show dashboard loading spinner
+      const loader = document.getElementById('dashboard-sync-loader');
+      if (loader) loader.style.display = 'flex';
 
-      // Real-time listener for Products collection
-      db.collection('products').onSnapshot(snapshot => {
-        let fbProducts = [];
-        snapshot.forEach(doc => {
-          fbProducts.push({ id: doc.id, ...doc.data() });
-        });
-        if (fbProducts.length > 0) {
-          products = fbProducts;
-          saveLocalData();
-          renderProducts();
-          initStockDropdowns();
-        }
-      }, err => console.error("Products listen error: ", err));
+      let initialLoadDone = false;
+      function onFirstLoad() {
+        if (initialLoadDone) return;
+        initialLoadDone = true;
+        const l = document.getElementById('dashboard-sync-loader');
+        if (l) l.style.display = 'none';
+      }
 
-      // Real-time listener for Stock logs collection
-      db.collection('stock_logs').orderBy('timestamp', 'desc').limit(40).onSnapshot(snapshot => {
-        let fbLogs = [];
-        snapshot.forEach(doc => {
-          fbLogs.push({ id: doc.id, ...doc.data() });
-        });
-        if (fbLogs.length > 0) {
-          stockLogs = fbLogs;
-          saveLocalData();
-          renderStockLogs();
-        }
-      }, err => console.error("Stock logs listen error: ", err));
+      // Products
+      const unsubProducts = db.collection('products').onSnapshot(snapshot => {
+        console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'products'. Fetch count: ${snapshot.size}`);
+        products = [];
+        snapshot.forEach(doc => products.push({ id: doc.id, ...doc.data() }));
+        console.log(`⚙️ [Firestore Realtime Sync] Processed ${products.length} active products.`);
+        saveLocalData();
+        renderProducts();
+        initStockDropdowns();
+        initDashboard();
+        onFirstLoad();
+      }, err => {
+        console.error('❌ Products listen error:', err);
+        onFirstLoad();
+      });
+      fbUnsubscribes.push(unsubProducts);
 
-      // Real-time listener for Invoices collection
-      db.collection('invoices').orderBy('timestamp', 'desc').limit(40).onSnapshot(snapshot => {
-        let fbInvoices = [];
-        snapshot.forEach(doc => {
-          fbInvoices.push(normalizeInvoice({ id: doc.id, ...doc.data() }));
-        });
-        if (fbInvoices.length > 0) {
-          invoices = fbInvoices;
-          saveLocalData();
-          initDashboard();
-        }
-      }, err => console.error("Invoices listen error: ", err));
+      // Stock Logs
+      const unsubStock = db.collection('stock_logs').orderBy('timestamp', 'desc').limit(40).onSnapshot(snapshot => {
+        console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'stock_logs'. Fetch count: ${snapshot.size}`);
+        stockLogs = [];
+        snapshot.forEach(doc => stockLogs.push({ id: doc.id, ...doc.data() }));
+        console.log(`⚙️ [Firestore Realtime Sync] Processed ${stockLogs.length} stock logs.`);
+        saveLocalData();
+        renderStockLogs();
+      }, err => console.error('❌ Stock logs listen error:', err));
+      fbUnsubscribes.push(unsubStock);
 
-      // Real-time listener for Deleted Products (Recycle Bin)
-      db.collection('deleted_products').onSnapshot(snapshot => {
-        let fbDeleted = [];
-        snapshot.forEach(doc => {
-          fbDeleted.push({ id: doc.id, ...doc.data() });
-        });
-        deletedProducts = fbDeleted;
+      // Invoices
+      const unsubInvoices = db.collection('invoices').orderBy('timestamp', 'desc').limit(40).onSnapshot(snapshot => {
+        console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'invoices'. Fetch count: ${snapshot.size}`);
+        invoices = [];
+        snapshot.forEach(doc => invoices.push(normalizeInvoice({ id: doc.id, ...doc.data() })));
+        console.log(`⚙️ [Firestore Realtime Sync] Processed ${invoices.length} billing invoices.`);
+        saveLocalData();
+        initDashboard();
+      }, err => console.error('❌ Invoices listen error:', err));
+      fbUnsubscribes.push(unsubInvoices);
+
+      // Deleted Products (Recycle Bin)
+      const unsubDeleted = db.collection('deleted_products').onSnapshot(snapshot => {
+        console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'deleted_products'. Fetch count: ${snapshot.size}`);
+        deletedProducts = [];
+        snapshot.forEach(doc => deletedProducts.push({ id: doc.id, ...doc.data() }));
+        console.log(`⚙️ [Firestore Realtime Sync] Processed ${deletedProducts.length} deleted products in recycle bin.`);
         saveLocalData();
         updateRecycleBinBadge();
-      }, err => console.error("Deleted products listen error: ", err));
+      }, err => console.error('❌ Deleted products listen error:', err));
+      fbUnsubscribes.push(unsubDeleted);
 
-      // Real-time listener for Stock History
-      db.collection('stock_history').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
-        let fbHistory = [];
-        snapshot.forEach(doc => {
-          fbHistory.push({ id: doc.id, ...doc.data() });
-        });
-        stockHistory = fbHistory;
+      // Stock History
+      const unsubHistory = db.collection('stock_history').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
+        console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'stock_history'. Fetch count: ${snapshot.size}`);
+        stockHistory = [];
+        snapshot.forEach(doc => stockHistory.push({ id: doc.id, ...doc.data() }));
+        console.log(`⚙️ [Firestore Realtime Sync] Processed ${stockHistory.length} stock history entries.`);
         saveLocalData();
-      }, err => console.error("Stock history listen error: ", err));
-      // Real-time listener for Customer Dues collection
-      db.collection('customer_dues').onSnapshot(snapshot => {
-        let fbDues = [];
-        snapshot.forEach(doc => {
-          fbDues.push({ id: doc.id, ...doc.data() });
-        });
-        customerDues = fbDues;
+      }, err => console.error('❌ Stock history listen error:', err));
+      fbUnsubscribes.push(unsubHistory);
+
+      // Customer Dues
+      const unsubDues = db.collection('customer_dues').onSnapshot(snapshot => {
+        console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'customer_dues'. Fetch count: ${snapshot.size}`);
+        customerDues = [];
+        snapshot.forEach(doc => customerDues.push({ id: doc.id, ...doc.data() }));
+        console.log(`⚙️ [Firestore Realtime Sync] Processed ${customerDues.length} customer dues.`);
         saveLocalData();
         initDashboard();
         if (typeof renderDueLedger === 'function') renderDueLedger();
-      }, err => console.error("Customer dues listen error: ", err));
+      }, err => console.error('❌ Customer dues listen error:', err));
+      fbUnsubscribes.push(unsubDues);
 
-      // Real-time listener for Payment History collection
-      db.collection('payment_history').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
-        let fbHistory = [];
-        snapshot.forEach(doc => {
-          fbHistory.push({ id: doc.id, ...doc.data() });
-        });
-        paymentHistory = fbHistory;
+      // Payment History
+      const unsubPayments = db.collection('payment_history').orderBy('timestamp', 'desc').limit(100).onSnapshot(snapshot => {
+        console.log(`📡 [Firestore Realtime Sync] Snapshot update for 'payment_history'. Fetch count: ${snapshot.size}`);
+        paymentHistory = [];
+        snapshot.forEach(doc => paymentHistory.push({ id: doc.id, ...doc.data() }));
+        console.log(`⚙️ [Firestore Realtime Sync] Processed ${paymentHistory.length} repayment records.`);
         saveLocalData();
         if (typeof renderDueLedger === 'function') renderDueLedger();
-      }, err => console.error("Payment history listen error: ", err));
+      }, err => console.error('❌ Payment history listen error:', err));
+      fbUnsubscribes.push(unsubPayments);
 
-      // Listen to Firebase Auth state changes
+      console.log(`✅ [Firestore Realtime Sync] ${fbUnsubscribes.length} Firestore realtime listeners active.`);
+    }
+
+    function stopRealtimeSync() {
+      if (fbUnsubscribes.length > 0) {
+        fbUnsubscribes.forEach(unsub => { try { unsub(); } catch(e) {} });
+        fbUnsubscribes = [];
+        console.log('🛑 Stopped all Firestore realtime listeners.');
+      }
+      // Reset all local data arrays so stale data is never shown after logout
+      products = [];
+      stockLogs = [];
+      invoices = [];
+      deletedProducts = [];
+      stockHistory = [];
+      customerDues = [];
+      paymentHistory = [];
+    }
+
+    // Auth state change listener — gateway for all realtime sync
+    function setupFirebaseListeners() {
+      if (!fbConnected) return;
+
       auth.onAuthStateChanged(user => {
         if (user) {
-          console.log("Firebase Auth State: User signed in:", user.email);
+          console.log('Firebase Auth State: User signed in:', user.email);
+          // Populate auth data
           authData = {
             name: user.displayName || 'Sri Siva Gayathri User',
             email: user.email || '',
             photoUrl: user.photoURL || ''
           };
+          // Enrich from Firestore user profile
+          db.collection('users').doc(user.uid).get()
+            .then(doc => {
+              if (doc.exists && doc.data()) {
+                const d = doc.data();
+                authData.name = d.name || authData.name;
+                authData.photoUrl = d.profileImage || authData.photoUrl;
+              }
+            })
+            .catch(err => console.error('User profile fetch error:', err));
+
           authStatus = 'success';
+          // Start realtime Firestore sync now that user is confirmed
+          startRealtimeSync();
         } else {
-          console.log("Firebase Auth State: No user signed in");
+          console.log('Firebase Auth State: No user signed in');
           authStatus = 'logout';
+          // Stop all listeners and clear local data
+          stopRealtimeSync();
         }
         authChecked = true;
         handleStartupResolution();
@@ -2212,11 +2261,22 @@
     }
 
     function performLogout(silent = false) {
+      // Stop all realtime Firestore listeners and clear local state immediately
+      stopRealtimeSync();
+
       // Clear LocalStorage auth details
       localStorage.removeItem('userEmail');
       localStorage.removeItem('userName');
       localStorage.removeItem('profileImageUrl');
       localStorage.removeItem('isLoggedIn');
+      // Clear cached Firestore data from local storage
+      localStorage.removeItem('ssg_products');
+      localStorage.removeItem('ssg_stockLogs');
+      localStorage.removeItem('ssg_invoices');
+      localStorage.removeItem('ssg_deletedProducts');
+      localStorage.removeItem('ssg_stockHistory');
+      localStorage.removeItem('ssg_customerDues');
+      localStorage.removeItem('ssg_paymentHistory');
 
       if (fbConnected && auth && !silent) {
         auth.signOut().then(() => {
@@ -2940,6 +3000,7 @@
       if (id) {
         // Edit Mode
         if (fbConnected) {
+          console.log(`💾 [Firestore Write] Saving edit to document 'products/${id}'`);
           const batch = db.batch();
           const prodRef = db.collection('products').doc(id);
           batch.set(prodRef, pData, { merge: true });
@@ -2952,11 +3013,12 @@
           });
           batch.commit()
             .then(() => {
+              console.log(`✅ [Firestore Write] Successfully updated product ${id} in Cloud.`);
               closeProductModal();
               showToast('Product "' + name + '" updated successfully!', 'success');
             })
             .catch(err => {
-              console.error(err);
+              console.error('❌ Firestore edit error:', err);
               showPremiumDialog({
                 title: 'Database Error',
                 message: 'Failed to update product in Cloud: ' + err.message,
@@ -2983,6 +3045,7 @@
         // Add Mode
         pData.createdAt = now;
         if (fbConnected) {
+          console.log(`💾 [Firestore Write] Creating new product document...`);
           const batch = db.batch();
           const prodRef = db.collection('products').doc();
           pData.id = prodRef.id;
@@ -2996,11 +3059,12 @@
           });
           batch.commit()
             .then(() => {
+              console.log(`✅ [Firestore Write] Successfully created product ${prodRef.id} in Cloud.`);
               closeProductModal();
               showToast('Product "' + name + '" added successfully!', 'success');
             })
             .catch(err => {
-              console.error(err);
+              console.error('❌ Firestore add error:', err);
               showPremiumDialog({
                 title: 'Database Error',
                 message: 'Failed to add product to Cloud: ' + err.message,
@@ -3052,34 +3116,8 @@
 
       const now = new Date().toISOString();
 
-      // Check if product is already deleted to prevent duplicate additions
-      const isAlreadyInDeleted = deletedProducts.some(prod => prod.id === id);
-      if (!isAlreadyInDeleted) {
-        deletedProducts.push({ ...p, isDeleted: true, deletedAt: now });
-      }
-
-      // Remove from products array
-      products = products.filter(prod => prod.id !== id);
-
-      // Add to stock history
-      stockHistory.unshift({
-        id: 'h_' + Date.now(),
-        productId: id,
-        productName: p.name,
-        actionType: 'Deleted',
-        timestamp: now,
-        userName: localStorage.getItem('userName') || 'Admin',
-        previousStock: p.quantity,
-        updatedStock: 0,
-        notes: 'Moved to recycle bin'
-      });
-
-      // Save local data and refresh UI immediately
-      saveLocalData();
-      renderProducts();
-      initStockDropdowns();
-
       if (fbConnected && db) {
+        console.log(`💾 [Firestore Write] Deleting product 'products/${id}' and moving to recycle bin`);
         const batch = db.batch();
         const delRef = db.collection('deleted_products').doc(id);
         batch.set(delRef, { ...p, isDeleted: true, deletedAt: now });
@@ -3101,15 +3139,35 @@
 
         batch.commit()
           .then(() => {
-            console.log('Product deletion synced to Firestore successfully.');
+            console.log(`✅ [Firestore Write] Successfully deleted product ${id} and created recycle bin entry.`);
             showToast('Product "' + p.name + '" moved to Recycle Bin!', 'success');
           })
           .catch(err => {
-            console.error('Firestore delete error:', err);
+            console.error('❌ Firestore delete error:', err);
             showToast('Failed to delete product in cloud.', 'error');
           });
       } else {
-        showToast('Product "' + p.name + '" moved to Recycle Bin!', 'success');
+        // Fallback local-only execution
+        const isAlreadyInDeleted = deletedProducts.some(prod => prod.id === id);
+        if (!isAlreadyInDeleted) {
+          deletedProducts.push({ ...p, isDeleted: true, deletedAt: now });
+        }
+        products = products.filter(prod => prod.id !== id);
+        stockHistory.unshift({
+          id: 'h_' + Date.now(),
+          productId: id,
+          productName: p.name,
+          actionType: 'Deleted',
+          timestamp: now,
+          userName: localStorage.getItem('userName') || 'Admin',
+          previousStock: p.quantity,
+          updatedStock: 0,
+          notes: 'Moved to recycle bin'
+        });
+        saveLocalData();
+        renderProducts();
+        initStockDropdowns();
+        showToast('Product "' + p.name + '" moved to Recycle Bin locally!', 'success');
       }
     }
 
