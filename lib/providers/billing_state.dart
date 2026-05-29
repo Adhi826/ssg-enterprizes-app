@@ -6,6 +6,7 @@ import '../models/product.dart';
 import '../models/customer_due.dart';
 import '../models/payment_record.dart';
 import '../services/firebase_service.dart';
+import 'auth_state.dart';
 
 class BillingState {
   final List<Invoice> invoices;
@@ -110,12 +111,14 @@ class BillingState {
 }
 
 class BillingNotifier extends StateNotifier<BillingState> {
+  final Ref ref;
+  final AuthState authState;
   final FirebaseService _fbService = FirebaseService();
   StreamSubscription? _invoicesSubscription;
   StreamSubscription? _duesSubscription;
   StreamSubscription? _paymentsSubscription;
 
-  BillingNotifier() : super(BillingState(
+  BillingNotifier(this.ref, this.authState) : super(BillingState(
     invoices: [],
     draftItems: [],
     customerName: '',
@@ -129,7 +132,25 @@ class BillingNotifier extends StateNotifier<BillingState> {
     customerDues: [],
     paymentHistory: [],
   )) {
-    _initDataSync();
+    if (authState.isAuthenticated) {
+      _initDataSync();
+    } else {
+      // Clear data or load samples for guest/default view if not authenticated
+      state = BillingState(
+        invoices: [],
+        draftItems: [],
+        customerName: '',
+        customerPhone: '',
+        discountAmount: 0.0,
+        gstPercentage: 18.0,
+        paymentStatus: 'Paid',
+        invoiceNotes: '',
+        paymentType: 'Full',
+        paidAmount: 0.0,
+        customerDues: [],
+        paymentHistory: [],
+      );
+    }
   }
 
   void _initDataSync() {
@@ -138,7 +159,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
         state = state.copyWith(invoices: fbInvoices);
       }, onError: (err) {
         print("Firestore invoices listen error: $err");
-        _loadSampleBills();
       });
 
       _duesSubscription = _fbService.getCustomerDuesStream().listen((fbDues) {
@@ -153,8 +173,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         print("Firestore payment history listen error: $err");
       });
     } catch (e) {
-      print("Firebase init failed or offline, loading samples: $e");
-      _loadSampleBills();
+      print("Firebase init failed: $e");
     }
   }
 
@@ -381,5 +400,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
 }
 
 final billingStateProvider = StateNotifierProvider<BillingNotifier, BillingState>((ref) {
-  return BillingNotifier();
+  final authState = ref.watch(authStateProvider);
+  return BillingNotifier(ref, authState);
 });

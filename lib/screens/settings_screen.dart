@@ -118,6 +118,7 @@ class SettingsScreen extends ConsumerWidget {
                       activeColor: Colors.cyanAccent,
                       onChanged: (val) {
                         ref.read(themeStateProvider.notifier).toggleTheme();
+                        ref.read(authStateProvider.notifier).syncDarkModeSetting(val);
                       },
                     ),
                   ),

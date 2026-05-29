@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/firebase_service.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -10,6 +12,10 @@ class AuthState {
   final String userName;
   final String profileImageUrl;
   final String languageCode;
+  final String phoneNumber;
+  final String role;
+  final bool isInitializing;
+  final bool isSettingLoading;
 
   AuthState({
     required this.isAuthenticated,
@@ -17,6 +23,10 @@ class AuthState {
     required this.userName,
     this.profileImageUrl = '',
     required this.languageCode,
+    this.phoneNumber = '',
+    this.role = 'Admin',
+    this.isInitializing = true,
+    this.isSettingLoading = false,
   });
 
   AuthState copyWith({
@@ -25,6 +35,10 @@ class AuthState {
     String? userName,
     String? profileImageUrl,
     String? languageCode,
+    String? phoneNumber,
+    String? role,
+    bool? isInitializing,
+    bool? isSettingLoading,
   }) {
     return AuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -32,39 +46,182 @@ class AuthState {
       userName: userName ?? this.userName,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       languageCode: languageCode ?? this.languageCode,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      role: role ?? this.role,
+      isInitializing: isInitializing ?? this.isInitializing,
+      isSettingLoading: isSettingLoading ?? this.isSettingLoading,
     );
   }
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(AuthState(isAuthenticated: false, userEmail: '', userName: '', profileImageUrl: '', languageCode: 'en')) {
-    _checkLoginStatus();
+  final FirebaseService _fbService = FirebaseService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  StreamSubscription<User?>? _authStateSubscription;
+
+  AuthNotifier()
+      : super(AuthState(
+          isAuthenticated: false,
+          userEmail: '',
+          userName: '',
+          profileImageUrl: '',
+          languageCode: 'en',
+          phoneNumber: '',
+          role: 'Admin',
+          isInitializing: true,
+          isSettingLoading: false,
+        )) {
+    _initAuthListener();
   }
 
-  void _checkLoginStatus() async {
+  void _initAuthListener() async {
     final prefs = await SharedPreferences.getInstance();
-    final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-    final userEmail = prefs.getString('userEmail') ?? '';
-    final userName = prefs.getString('userName') ?? '';
-    final profileImageUrl = prefs.getString('profileImageUrl') ?? '';
-    final languageCode = prefs.getString('languageCode') ?? 'en';
-    
-    state = AuthState(
-      isAuthenticated: isLoggedIn,
-      userEmail: userEmail,
-      userName: userName,
-      profileImageUrl: profileImageUrl,
-      languageCode: languageCode,
-    );
+    final localLang = prefs.getString('languageCode') ?? 'en';
+    state = state.copyWith(languageCode: localLang);
+
+    _authStateSubscription = _auth.authStateChanges().listen((User? user) async {
+      if (user == null) {
+        state = AuthState(
+          isAuthenticated: false,
+          userEmail: '',
+          userName: '',
+          profileImageUrl: '',
+          languageCode: state.languageCode,
+          phoneNumber: '',
+          role: 'Admin',
+          isInitializing: false,
+          isSettingLoading: false,
+        );
+      } else {
+        // Fetch additional profile data & settings from Firestore
+        String name = user.displayName ?? 'Sri Siva Gayathri User';
+        String email = user.email ?? '';
+        String photoUrl = user.photoURL ?? '';
+        String phone = user.phoneNumber ?? '';
+        String role = 'Admin';
+        String lang = state.languageCode;
+
+        try {
+          final userDoc = await _fbService.getUserProfile(user.uid);
+          if (userDoc.exists && userDoc.data() != null) {
+            final data = userDoc.data()!;
+            name = data['name'] ?? name;
+            email = data['email'] ?? email;
+            phone = data['phoneNumber'] ?? phone;
+            role = data['role'] ?? role;
+            photoUrl = data['profileImage'] ?? photoUrl;
+          } else {
+            // Create default document if not existing
+            await _fbService.saveUserProfile(user.uid, {
+              'uid': user.uid,
+              'name': name,
+              'email': email,
+              'phoneNumber': phone,
+              'role': role,
+              'profileImage': photoUrl,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          print("Error retrieving user profile from Firestore: $e");
+        }
+
+        try {
+          final settingsDoc = await _fbService.getSettings(user.uid);
+          if (settingsDoc.exists && settingsDoc.data() != null) {
+            final data = settingsDoc.data()!;
+            lang = data['languageCode'] ?? lang;
+            final remoteDarkMode = data['isDarkMode'] as bool?;
+            
+            if (remoteDarkMode != null) {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('isDarkMode', remoteDarkMode);
+            }
+          }
+        } catch (e) {
+          print("Error retrieving settings from Firestore: $e");
+        }
+
+        state = AuthState(
+          isAuthenticated: true,
+          userEmail: email,
+          userName: name,
+          profileImageUrl: photoUrl,
+          languageCode: lang,
+          phoneNumber: phone,
+          role: role,
+          isInitializing: false,
+          isSettingLoading: false,
+        );
+      }
+    });
+  }
+
+  Future<void> signInWithEmail(String email, String password) async {
+    state = state.copyWith(isSettingLoading: true);
+    try {
+      await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+    } catch (e) {
+      state = state.copyWith(isSettingLoading: false);
+      rethrow;
+    }
+  }
+
+  Future<void> signUpWithEmail({
+    required String name,
+    required String email,
+    required String password,
+    required String phoneNumber,
+  }) async {
+    state = state.copyWith(isSettingLoading: true);
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final user = credential.user;
+      if (user != null) {
+        // Save profile immediately
+        await _fbService.saveUserProfile(user.uid, {
+          'uid': user.uid,
+          'name': name,
+          'email': email.trim(),
+          'phoneNumber': phoneNumber,
+          'role': 'Admin',
+          'profileImage': '',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      state = state.copyWith(isSettingLoading: false);
+      rethrow;
+    }
+  }
+
+  Future<void> sendPasswordReset(String email) async {
+    state = state.copyWith(isSettingLoading: true);
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      state = state.copyWith(isSettingLoading: false);
+    } catch (e) {
+      state = state.copyWith(isSettingLoading: false);
+      rethrow;
+    }
   }
 
   Future<bool> signInWithGoogle() async {
+    state = state.copyWith(isSettingLoading: true);
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       
       if (googleUser == null) {
-        return false; // User cancelled account selection
+        state = state.copyWith(isSettingLoading: false);
+        return false;
       }
       
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
@@ -73,47 +230,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         idToken: googleAuth.idToken,
       );
       
-      final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-      final User? user = userCredential.user;
-      
-      if (user != null) {
-        final name = user.displayName ?? 'Sri Siva Gayathri User';
-        final email = user.email ?? '';
-        final photoUrl = user.photoURL ?? '';
-        
-        // Save user data to Firestore
-        try {
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-            'uid': user.uid,
-            'name': name,
-            'email': email,
-            'profileImage': photoUrl,
-            'lastLogin': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        } catch (e) {
-          print("Error saving user to Firestore: $e");
-        }
-        
-        // Save to SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('isLoggedIn', true);
-        await prefs.setString('userEmail', email);
-        await prefs.setString('userName', name);
-        await prefs.setString('profileImageUrl', photoUrl);
-        
-        state = AuthState(
-          isAuthenticated: true,
-          userEmail: email,
-          userName: name,
-          profileImageUrl: photoUrl,
-          languageCode: state.languageCode,
-        );
-        return true;
-      }
+      await _auth.signInWithCredential(credential);
+      return true;
     } catch (e) {
       print("Google Sign-In failed: $e");
+      state = state.copyWith(isSettingLoading: false);
+      return false;
     }
-    return false;
   }
 
   Future<void> logout() async {
@@ -123,30 +246,42 @@ class AuthNotifier extends StateNotifier<AuthState> {
       print("Google signout error: $e");
     }
     try {
-      await FirebaseAuth.instance.signOut();
+      await _auth.signOut();
     } catch (e) {
       print("Firebase signout error: $e");
     }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLoggedIn', false);
-    await prefs.remove('userEmail');
-    await prefs.remove('userName');
-    await prefs.remove('profileImageUrl');
-
-    state = AuthState(
-      isAuthenticated: false,
-      userEmail: '',
-      userName: '',
-      profileImageUrl: '',
-      languageCode: state.languageCode,
-    );
   }
 
   Future<void> setLanguage(String code) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('languageCode', code);
     state = state.copyWith(languageCode: code);
+
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        await _fbService.saveSettings(user.uid, {'languageCode': code});
+      } catch (e) {
+        print("Error saving language setting to Firestore: $e");
+      }
+    }
+  }
+
+  Future<void> syncDarkModeSetting(bool isDarkMode) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        await _fbService.saveSettings(user.uid, {'isDarkMode': isDarkMode});
+      } catch (e) {
+        print("Error saving dark mode setting to Firestore: $e");
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
   }
 }
 

@@ -39,9 +39,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
 
   void _navigateToNextScreen() async {
     await Future.delayed(const Duration(milliseconds: 3000));
+    _checkAndNavigate();
+  }
+
+  void _checkAndNavigate() {
     if (!mounted) return;
-    
     final authState = ref.read(authStateProvider);
+    
+    if (authState.isInitializing) {
+      Future.delayed(const Duration(milliseconds: 100), _checkAndNavigate);
+      return;
+    }
     
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(

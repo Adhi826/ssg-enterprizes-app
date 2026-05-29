@@ -5,6 +5,7 @@ import '../models/product.dart';
 import '../models/stock_entry.dart';
 import '../models/stock_history.dart';
 import '../services/firebase_service.dart';
+import 'auth_state.dart';
 
 class InventoryState {
   final List<Product> products;
@@ -104,20 +105,33 @@ class InventoryState {
 }
 
 class InventoryNotifier extends StateNotifier<InventoryState> {
+  final Ref ref;
+  final AuthState authState;
   final FirebaseService _fbService = FirebaseService();
   StreamSubscription? _productsSubscription;
   StreamSubscription? _stockSubscription;
   StreamSubscription? _deletedSubscription;
   StreamSubscription? _historySubscription;
 
-  InventoryNotifier() : super(InventoryState(
+  InventoryNotifier(this.ref, this.authState) : super(InventoryState(
     products: [],
     stockEntries: [],
     deletedProducts: [],
     stockHistory: [],
     isLoading: false,
   )) {
-    _initDataSync();
+    if (authState.isAuthenticated) {
+      _initDataSync();
+    } else {
+      // Clear data or load samples for guest/default view if not authenticated
+      state = InventoryState(
+        products: [],
+        stockEntries: [],
+        deletedProducts: [],
+        stockHistory: [],
+        isLoading: false,
+      );
+    }
   }
 
   void _initDataSync() {
@@ -128,7 +142,7 @@ class InventoryNotifier extends StateNotifier<InventoryState> {
         state = state.copyWith(products: fbProducts, isLoading: false);
       }, onError: (err) {
         print("Firestore products listen error: $err");
-        _loadSampleData();
+        state = state.copyWith(isLoading: false);
       });
 
       _stockSubscription = _fbService.getStockEntriesStream().listen((fbLogs) {
@@ -149,8 +163,8 @@ class InventoryNotifier extends StateNotifier<InventoryState> {
         print("Firestore stock history listen error: $err");
       });
     } catch (e) {
-      print("Firebase init failed or offline, loading local samples: $e");
-      _loadSampleData();
+      print("Firebase init failed: $e");
+      state = state.copyWith(isLoading: false);
     }
   }
 
@@ -424,5 +438,6 @@ class InventoryNotifier extends StateNotifier<InventoryState> {
 }
 
 final inventoryStateProvider = StateNotifierProvider<InventoryNotifier, InventoryState>((ref) {
-  return InventoryNotifier();
+  final authState = ref.watch(authStateProvider);
+  return InventoryNotifier(ref, authState);
 });

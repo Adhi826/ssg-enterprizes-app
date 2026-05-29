@@ -327,4 +327,22 @@ class FirebaseService {
     final uploadTask = await ref.putFile(imageFile);
     return await uploadTask.ref.getDownloadURL();
   }
+
+  // ─── USER & SETTINGS SERVICES ──────────────────────────────
+
+  Future<void> saveUserProfile(String uid, Map<String, dynamic> data) async {
+    await _db.collection('users').doc(uid).set(data, SetOptions(merge: true));
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> getUserProfile(String uid) async {
+    return await _db.collection('users').doc(uid).get();
+  }
+
+  Future<void> saveSettings(String uid, Map<String, dynamic> settings) async {
+    await _db.collection('settings').doc(uid).set(settings, SetOptions(merge: true));
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> getSettings(String uid) async {
+    return await _db.collection('settings').doc(uid).get();
+  }
 }

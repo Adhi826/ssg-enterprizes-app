@@ -84,6 +84,38 @@ class DashboardOverviewTab extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
     final dateFormat = DateFormat('dd-MM-yyyy hh:mm a');
 
+    if (invState.isLoading) {
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF0F2027),
+              Color(0xFF203A43),
+              Color(0xFF2C5364),
+            ],
+          ),
+        ),
+        child: const Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: Colors.cyanAccent),
+                SizedBox(height: 20),
+                Text(
+                  'Syncing distributor records...',
+                  style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500, letterSpacing: 0.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     // Stats calculations
     int totalProducts = invState.products.length;
     int totalStock = invState.products.fold(0, (sum, p) => sum + p.quantity);

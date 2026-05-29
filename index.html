@@ -750,25 +750,84 @@
     </div>
     <!-- LOGIN SCREEN -->
     <div id="login-screen" class="page hidden" style="justify-content: center; align-items: center; padding: 24px;">
-      <div class="glass-card" style="width: 100%; max-width: 380px; padding: 40px 24px; text-align: center; border-radius: 28px; box-shadow: 0 15px 35px rgba(0,0,0,0.4); margin-bottom: 0;">
+      <div class="glass-card" style="width: 100%; max-width: 420px; padding: 30px 20px; text-align: center; border-radius: 28px; box-shadow: 0 15px 35px rgba(0,0,0,0.4); margin-bottom: 0;">
         <!-- Logo -->
-        <div style="width: 90px; height: 90px; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto 24px; box-shadow: 0 0 25px rgba(0, 242, 254, 0.35);">
-          <i class="fa-solid fa-droplet" style="font-size: 40px; color: #0f172a;"></i>
+        <div style="width: 80px; height: 80px; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto 16px; box-shadow: 0 0 25px rgba(0, 242, 254, 0.35);">
+          <i class="fa-solid fa-droplet" style="font-size: 36px; color: #0f172a;"></i>
         </div>
         
         <!-- Titles -->
-        <h2 style="font-size: 22px; font-weight: 700; letter-spacing: 1px; color: white;">SRI SIVA GAYATHRI</h2>
-        <h3 style="font-size: 15px; font-weight: 500; letter-spacing: 2px; color: var(--accent-cyan); margin-bottom: 8px;">Enterprizes</h3>
-        <p style="font-size: 11px; color: var(--text-sub); margin-bottom: 30px;">Stock & Billing Manager</p>
+        <h2 style="font-size: 20px; font-weight: 700; letter-spacing: 1px; color: white;">SRI SIVA GAYATHRI</h2>
+        <h3 style="font-size: 14px; font-weight: 500; letter-spacing: 2px; color: var(--accent-cyan); margin-bottom: 4px;">Enterprizes</h3>
+        <p style="font-size: 10px; color: var(--text-sub); margin-bottom: 20px;">Stock & Billing Manager</p>
+
+        <!-- Mode Title -->
+        <h4 id="auth-mode-title" style="font-size: 16px; font-weight: 700; margin-bottom: 16px; color: white;">Sign In</h4>
 
         <!-- Error box -->
-        <div id="web-auth-error" class="hidden" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 10px 14px; margin-bottom: 24px; font-size: 11px; color: var(--accent-red); align-items: center; gap: 8px; text-align: left;">
+        <div id="web-auth-error" class="hidden" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px; color: var(--accent-red); align-items: center; gap: 8px; text-align: left;">
           <i class="fa-solid fa-circle-exclamation"></i>
           <span id="web-auth-error-msg"></span>
         </div>
 
+        <!-- Credentials Form -->
+        <form id="auth-form" onsubmit="handleAuthSubmit(event)" style="text-align: left;">
+          <!-- Name Field (SignUp only) -->
+          <div id="field-name-group" class="form-group hidden">
+            <label class="form-label" style="color: var(--text-sub);">Full Name</label>
+            <input type="text" id="auth-name" class="input-field" placeholder="Enter your full name" style="height: 46px; padding: 10px 14px;">
+          </div>
+
+          <!-- Email Field -->
+          <div class="form-group">
+            <label class="form-label" style="color: var(--text-sub);">Email Address</label>
+            <input type="email" id="auth-email" class="input-field" placeholder="name@email.com" required style="height: 46px; padding: 10px 14px;">
+          </div>
+
+          <!-- Phone Field (SignUp only) -->
+          <div id="field-phone-group" class="form-group hidden">
+            <label class="form-label" style="color: var(--text-sub);">Mobile Number</label>
+            <input type="tel" id="auth-phone" class="input-field" placeholder="10-digit number" style="height: 46px; padding: 10px 14px;">
+          </div>
+
+          <!-- Password Field -->
+          <div id="field-pass-group" class="form-group">
+            <label class="form-label" style="color: var(--text-sub);">Password</label>
+            <div style="position: relative;">
+              <input type="password" id="auth-password" class="input-field" placeholder="Min 6 characters" style="height: 46px; padding: 10px 14px; padding-right: 40px;">
+              <i id="toggle-auth-password" class="fa-solid fa-eye-slash" style="position: absolute; right: 14px; top: 15px; color: var(--text-sub); cursor: pointer;" onclick="toggleAuthPasswordVisibility('auth-password')"></i>
+            </div>
+          </div>
+
+          <!-- Confirm Password Field (SignUp only) -->
+          <div id="field-confirm-pass-group" class="form-group hidden">
+            <label class="form-label" style="color: var(--text-sub);">Confirm Password</label>
+            <div style="position: relative;">
+              <input type="password" id="auth-confirm-password" class="input-field" placeholder="Re-enter password" style="height: 46px; padding: 10px 14px; padding-right: 40px;">
+              <i id="toggle-auth-confirm-password" class="fa-solid fa-eye-slash" style="position: absolute; right: 14px; top: 15px; color: var(--text-sub); cursor: pointer;" onclick="toggleAuthPasswordVisibility('auth-confirm-password')"></i>
+            </div>
+          </div>
+
+          <!-- Forgot Password Link (SignIn only) -->
+          <div id="auth-forgot-link-wrapper" style="text-align: right; margin-top: -10px; margin-bottom: 16px;">
+            <a href="#" style="font-size: 11px; color: var(--accent-cyan); text-decoration: none; font-weight: bold;" onclick="changeWebAuthMode('forgotPassword'); return false;">Forgot Password?</a>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="auth-submit-btn" class="btn" style="height: 48px; border-radius: 12px; font-weight: 700; font-size: 14px;">
+            <span id="auth-submit-text">Sign In</span>
+          </button>
+        </form>
+
+        <!-- Divider -->
+        <div id="auth-divider" style="display: flex; align-items: center; margin: 16px 0;">
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.1);"></div>
+          <span style="font-size: 10px; color: var(--text-sub); padding: 0 10px;">OR</span>
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.1);"></div>
+        </div>
+
         <!-- Google button -->
-        <button id="google-signin-btn" class="btn" style="background: white; color: #1e293b; border-radius: 14px; font-weight: 700; height: 50px; font-size: 13px; display: flex; justify-content: center; align-items: center; gap: 10px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.15); cursor: pointer; transition: transform 0.2s;" onclick="handleGoogleLogin()">
+        <button id="google-signin-btn" class="btn" style="background: white; color: #1e293b; border-radius: 12px; font-weight: 700; height: 48px; font-size: 13px; display: flex; justify-content: center; align-items: center; gap: 10px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.15); cursor: pointer; transition: transform 0.2s;" onclick="handleGoogleLogin()">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="18px" height="18px">
             <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/>
             <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/>
@@ -778,9 +837,15 @@
           <span id="google-btn-text">Continue with Google</span>
         </button>
 
-        <div style="margin-top: 18px;">
-          <a href="#" style="font-size: 11px; color: var(--accent-cyan); text-decoration: none; font-weight: 500;" onclick="openFirebaseConfigModal(); return false;">
-            <i class="fa-solid fa-cloud-arrow-up" style="margin-right: 4px;"></i>Configure Firebase Project
+        <!-- Mode Toggle Footer Links -->
+        <div style="margin-top: 20px; font-size: 12px; color: var(--text-sub);">
+          <span id="auth-footer-text">Don't have an account?</span>
+          <a href="#" id="auth-footer-link" style="color: var(--accent-cyan); text-decoration: none; font-weight: bold; margin-left: 4px;" onclick="changeWebAuthMode('signUp'); return false;">Sign Up</a>
+        </div>
+
+        <div style="margin-top: 14px;">
+          <a href="#" style="font-size: 11px; color: var(--text-sub); text-decoration: none;" onclick="openFirebaseConfigModal(); return false;">
+            <i class="fa-solid fa-cloud-arrow-up" style="margin-right: 4px; color: var(--accent-cyan);"></i>Configure Firebase Project
           </a>
         </div>
       </div>
@@ -1759,6 +1824,21 @@
           storage = firebase.storage();
           fbConnected = true;
 
+          // Enable Firestore offline persistence
+          db.enablePersistence()
+            .then(() => {
+              console.log("Firestore persistence enabled successfully!");
+            })
+            .catch((err) => {
+              if (err.code == 'failed-precondition') {
+                console.warn("Firestore persistence failed: Multiple tabs open.");
+              } else if (err.code == 'unimplemented') {
+                console.warn("Firestore persistence is not supported by this browser.");
+              } else {
+                console.error("Firestore persistence error:", err);
+              }
+            });
+
           // Set explicit local persistence
           auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
             .then(() => {
@@ -2218,6 +2298,256 @@
           location.reload();
         }
       });
+    }
+
+    let currentWebAuthMode = 'signIn';
+
+    function changeWebAuthMode(mode) {
+      currentWebAuthMode = mode;
+      const titleEl = document.getElementById('auth-mode-title');
+      const submitTextEl = document.getElementById('auth-submit-text');
+      const footerTextEl = document.getElementById('auth-footer-text');
+      const footerLinkEl = document.getElementById('auth-footer-link');
+      
+      const nameGroup = document.getElementById('field-name-group');
+      const phoneGroup = document.getElementById('field-phone-group');
+      const passGroup = document.getElementById('field-pass-group');
+      const confirmPassGroup = document.getElementById('field-confirm-pass-group');
+      const forgotLinkWrapper = document.getElementById('auth-forgot-link-wrapper');
+      const divider = document.getElementById('auth-divider');
+      const googleBtn = document.getElementById('google-signin-btn');
+
+      // Reset error box
+      const errorBox = document.getElementById('web-auth-error');
+      if (errorBox) errorBox.classList.add('hidden');
+
+      if (mode === 'signIn') {
+        titleEl.innerText = 'Sign In';
+        submitTextEl.innerText = 'Sign In';
+        footerTextEl.innerText = "Don't have an account?";
+        footerLinkEl.innerText = 'Sign Up';
+        footerLinkEl.setAttribute('onclick', 'changeWebAuthMode("signUp"); return false;');
+
+        nameGroup.classList.add('hidden');
+        phoneGroup.classList.add('hidden');
+        passGroup.classList.remove('hidden');
+        confirmPassGroup.classList.add('hidden');
+        forgotLinkWrapper.classList.remove('hidden');
+        divider.classList.remove('hidden');
+        googleBtn.classList.remove('hidden');
+      } else if (mode === 'signUp') {
+        titleEl.innerText = 'Create Account';
+        submitTextEl.innerText = 'Create Account';
+        footerTextEl.innerText = 'Already have an account?';
+        footerLinkEl.innerText = 'Sign In';
+        footerLinkEl.setAttribute('onclick', 'changeWebAuthMode("signIn"); return false;');
+
+        nameGroup.classList.remove('hidden');
+        phoneGroup.classList.remove('hidden');
+        passGroup.classList.remove('hidden');
+        confirmPassGroup.classList.remove('hidden');
+        forgotLinkWrapper.classList.add('hidden');
+        divider.classList.remove('hidden');
+        googleBtn.classList.remove('hidden');
+      } else if (mode === 'forgotPassword') {
+        titleEl.innerText = 'Reset Password';
+        submitTextEl.innerText = 'Send Reset Link';
+        footerTextEl.innerText = 'Back to';
+        footerLinkEl.innerText = 'Sign In';
+        footerLinkEl.setAttribute('onclick', 'changeWebAuthMode("signIn"); return false;');
+
+        nameGroup.classList.add('hidden');
+        phoneGroup.classList.add('hidden');
+        passGroup.classList.add('hidden');
+        confirmPassGroup.classList.add('hidden');
+        forgotLinkWrapper.classList.add('hidden');
+        divider.classList.add('hidden');
+        googleBtn.classList.add('hidden');
+      }
+    }
+
+    function toggleAuthPasswordVisibility(id) {
+      const input = document.getElementById(id);
+      const icon = document.getElementById('toggle-' + id);
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fa-solid fa-eye';
+      } else {
+        input.type = 'password';
+        icon.className = 'fa-solid fa-eye-slash';
+      }
+    }
+
+    function handleAuthSubmit(e) {
+      e.preventDefault();
+      
+      const errorBox = document.getElementById('web-auth-error');
+      const errorMsg = document.getElementById('web-auth-error-msg');
+      if (errorBox) errorBox.classList.add('hidden');
+
+      if (!fbConnected || !auth) {
+        showPremiumDialog({
+          title: 'Firebase Connection Required',
+          message: 'Firebase is not connected. Please enter your Firebase web credentials to initialize the authentication service.',
+          icon: 'fa-triangle-exclamation',
+          iconColor: 'var(--accent-orange)',
+          iconBg: 'rgba(249, 115, 22, 0.15)',
+          confirmText: 'OK',
+          onConfirm: function() {
+            openFirebaseConfigModal();
+          }
+        });
+        return;
+      }
+
+      const email = document.getElementById('auth-email').value.trim();
+      
+      // Load UI spinner
+      const submitText = document.getElementById('auth-submit-text');
+      const submitBtn = document.getElementById('auth-submit-btn');
+      submitBtn.disabled = true;
+      submitText.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...';
+
+      function resetSubmitBtn() {
+        submitBtn.disabled = false;
+        submitText.innerHTML = currentWebAuthMode === 'signIn' ? 'Sign In' : (currentWebAuthMode === 'signUp' ? 'Create Account' : 'Send Reset Link');
+      }
+
+      if (currentWebAuthMode === 'signIn') {
+        const password = document.getElementById('auth-password').value;
+        auth.signInWithEmailAndPassword(email, password)
+          .then(result => {
+            const user = result.user;
+            db.collection('users').doc(user.uid).get()
+              .then(doc => {
+                let name = user.displayName || email.split('@')[0];
+                let photoUrl = user.photoURL || '';
+                if (doc.exists && doc.data()) {
+                  name = doc.data().name || name;
+                  photoUrl = doc.data().profileImage || photoUrl;
+                }
+                loginSuccess(name, email, photoUrl);
+                resetSubmitBtn();
+              })
+              .catch(err => {
+                console.error("Firestore get user profile error:", err);
+                loginSuccess(email.split('@')[0], email, '');
+                resetSubmitBtn();
+              });
+          })
+          .catch(err => {
+            console.error("Sign In Error:", err);
+            resetSubmitBtn();
+            displayWebAuthError(err);
+          });
+      } else if (currentWebAuthMode === 'signUp') {
+        const name = document.getElementById('auth-name').value.trim();
+        const phone = document.getElementById('auth-phone').value.trim();
+        const password = document.getElementById('auth-password').value;
+        const confirmPassword = document.getElementById('auth-confirm-password').value;
+
+        // Validations
+        if (!name) {
+          showToast('Please enter your full name.', 'error');
+          resetSubmitBtn();
+          return;
+        }
+        if (!/^\d{10}$/.test(phone)) {
+          showToast('Please enter a valid 10-digit mobile number.', 'error');
+          resetSubmitBtn();
+          return;
+        }
+        if (password.length < 6) {
+          showToast('Password must be at least 6 characters.', 'error');
+          resetSubmitBtn();
+          return;
+        }
+        if (password !== confirmPassword) {
+          showToast('Passwords do not match.', 'error');
+          resetSubmitBtn();
+          return;
+        }
+
+        auth.createUserWithEmailAndPassword(email, password)
+          .then(result => {
+            const user = result.user;
+            
+            // Save profile details to Firestore users collection
+            db.collection('users').doc(user.uid).set({
+              uid: user.uid,
+              name: name,
+              email: email,
+              phoneNumber: phone,
+              role: 'Admin',
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true })
+            .then(() => {
+              console.log("User profile saved successfully.");
+              loginSuccess(name, email, '');
+              resetSubmitBtn();
+            })
+            .catch(err => {
+              console.error("Firestore user profile save error:", err);
+              loginSuccess(name, email, '');
+              resetSubmitBtn();
+            });
+          })
+          .catch(err => {
+            console.error("Sign Up Error:", err);
+            resetSubmitBtn();
+            displayWebAuthError(err);
+          });
+      } else if (currentWebAuthMode === 'forgotPassword') {
+        auth.sendPasswordResetEmail(email)
+          .then(() => {
+            showPremiumDialog({
+              title: 'Reset Link Sent',
+              message: 'A password reset recovery email has been sent to <strong>' + email + '</strong>.',
+              icon: 'fa-envelope-circle-check',
+              iconColor: 'var(--accent-green)',
+              iconBg: 'rgba(34, 197, 94, 0.15)',
+              confirmText: 'OK',
+              onConfirm: function() {
+                changeWebAuthMode('signIn');
+              }
+            });
+            resetSubmitBtn();
+          })
+          .catch(err => {
+            console.error("Password Reset Error:", err);
+            resetSubmitBtn();
+            displayWebAuthError(err);
+          });
+      }
+    }
+
+    function displayWebAuthError(error) {
+      const errorBox = document.getElementById('web-auth-error');
+      const errorMsg = document.getElementById('web-auth-error-msg');
+      
+      let message = error.message || "Authentication failed.";
+      
+      if (error.code === 'auth/user-not-found') {
+        message = 'No account found with this email.';
+      } else if (error.code === 'auth/wrong-password') {
+        message = 'Incorrect password. Please try again.';
+      } else if (error.code === 'auth/email-already-in-use') {
+        message = 'This email address is already registered.';
+      } else if (error.code === 'auth/weak-password') {
+        message = 'The password is too weak. Must be at least 6 characters.';
+      } else if (error.code === 'auth/invalid-email') {
+        message = 'Please enter a valid email address.';
+      } else if (error.code === 'auth/network-request-failed') {
+        message = 'Network error. Please check your connection.';
+      }
+
+      if (errorBox && errorMsg) {
+        errorMsg.innerText = message;
+        errorBox.style.display = 'flex';
+        errorBox.classList.remove('hidden');
+      } else {
+        showToast(message, 'error');
+      }
     }
 
     function handleGoogleLogin() {
