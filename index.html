@@ -33,6 +33,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <!-- SheetJS for Excel/CSV Import -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- HTML2PDF.js for professional high-fidelity PDF invoice generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   
   <style>
     :root {
@@ -4270,11 +4272,44 @@
       document.getElementById('invoice-preview-modal').classList.remove('hidden');
     }
 
+    function getInvoicePdfOptions(filename) {
+      return {
+        margin:       [4, 2, 4, 2],
+        filename:     filename,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+    }
+
     function downloadInvoicePDF() {
       if (!currentInvoice) return;
-      // Use browser print as PDF download
-      showToast('Use Print > Save as PDF to download the invoice.', 'success');
-      window.print();
+      var printArea = document.getElementById('print-area');
+      if (!printArea) { showToast('Invoice preview not found.', 'error'); return; }
+
+      var filename = 'SSG_Invoice_' + (currentInvoice.invoiceNumber || 'bill') + '.pdf';
+      showToast('Generating PDF...', 'success');
+
+      // Clone print area to avoid visual glitches during capture
+      var clone = printArea.cloneNode(true);
+      clone.style.width = '210mm';
+      clone.style.padding = '10mm';
+      clone.style.background = '#ffffff';
+      clone.style.color = '#000000';
+      clone.style.position = 'fixed';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      document.body.appendChild(clone);
+
+      html2pdf().set(getInvoicePdfOptions(filename)).from(clone).save().then(function() {
+        document.body.removeChild(clone);
+        showToast('PDF downloaded: ' + filename, 'success');
+      }).catch(function(err) {
+        document.body.removeChild(clone);
+        console.error('PDF generation error:', err);
+        showToast('PDF generation failed. Falling back to print.', 'error');
+        window.print();
+      });
     }
 
     function closeInvoiceModal() {
@@ -4283,8 +4318,70 @@
 
     function shareWhatsApp() {
       if (!currentInvoice) return;
-      const text = `📄 Invoice from Sri Siva Gayathri Enterprizes\nInvoice: ${currentInvoice.invoiceNumber}\nCustomer: ${currentInvoice.customerName}\nAmount: Rs ${currentInvoice.grandtotal.toFixed(2)}\nAddress: Rajampalli\nPh: 7036657769 / 9000990191\nThank you!`;
-      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+      var printArea = document.getElementById('print-area');
+      if (!printArea) { showToast('Invoice preview not found.', 'error'); return; }
+
+      var filename = 'SSG_Invoice_' + (currentInvoice.invoiceNumber || 'bill') + '.pdf';
+      showToast('Generating PDF for sharing...', 'success');
+
+      // Clone print area for clean PDF capture
+      var clone = printArea.cloneNode(true);
+      clone.style.width = '210mm';
+      clone.style.padding = '10mm';
+      clone.style.background = '#ffffff';
+      clone.style.color = '#000000';
+      clone.style.position = 'fixed';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      document.body.appendChild(clone);
+
+      html2pdf().set(getInvoicePdfOptions(filename)).from(clone).outputPdf('blob').then(function(pdfBlob) {
+        document.body.removeChild(clone);
+
+        var pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+
+        // Try native share with file attachment (works on Android Chrome / PWA)
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+          navigator.share({
+            title: 'Invoice - Sri Siva Gayathri Enterprizes',
+            text: '📄 Invoice ' + currentInvoice.invoiceNumber + ' for ' + currentInvoice.customerName + ' - Rs ' + currentInvoice.grandtotal.toFixed(2),
+            files: [pdfFile]
+          }).then(function() {
+            showToast('Invoice shared successfully!', 'success');
+          }).catch(function(err) {
+            if (err.name !== 'AbortError') {
+              console.error('Share failed:', err);
+              fallbackWhatsAppShare();
+            }
+          });
+        } else {
+          // Fallback: download the PDF and open WhatsApp with text message
+          showToast('File sharing not supported. Downloading PDF & opening WhatsApp...', 'success');
+          var downloadLink = document.createElement('a');
+          downloadLink.href = URL.createObjectURL(pdfBlob);
+          downloadLink.download = filename;
+          downloadLink.click();
+          URL.revokeObjectURL(downloadLink.href);
+          fallbackWhatsAppShare();
+        }
+      }).catch(function(err) {
+        document.body.removeChild(clone);
+        console.error('PDF generation for share failed:', err);
+        showToast('PDF generation failed. Sending text message instead.', 'error');
+        fallbackWhatsAppShare();
+      });
+    }
+
+    function fallbackWhatsAppShare() {
+      if (!currentInvoice) return;
+      var text = '📄 Invoice from Sri Siva Gayathri Enterprizes\n'
+        + 'Invoice: ' + currentInvoice.invoiceNumber + '\n'
+        + 'Customer: ' + currentInvoice.customerName + '\n'
+        + 'Amount: Rs ' + currentInvoice.grandtotal.toFixed(2) + '\n'
+        + 'Address: Rajampalli\n'
+        + 'Ph: 7036657769 / 9000990191\n'
+        + 'Thank you!';
+      window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
     }
     // Reports and AI Recommendations
     function initReportsTab() {
